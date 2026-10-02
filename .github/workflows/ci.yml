@@ -128,7 +128,7 @@ jobs:
 
       - name: Verify control files cannot be worker-writable
         run: |
-          cp examples/supervisor/job.json             /tmp/oryvael-demo-workspace/self-modifiable-job.json
+          sudo cp examples/supervisor/job.json             /tmp/oryvael-demo-workspace/self-modifiable-job.json
 
           set +e
           sudo ./target/debug/oryvael supervise             --principal examples/supervisor/developer-principal.json             --job /tmp/oryvael-demo-workspace/self-modifiable-job.json
