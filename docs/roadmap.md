@@ -8,7 +8,24 @@ Exit: schemas valid; crates compile/test; core invariants have test IDs.
 
 ## Phase 1 — Local Trusted Supervisor
 
-Deliver principal identity, Linux sandbox integration, capability broker, audit service, local artifact store and policy CLI.
+Status: implementation in progress; the first Linux supervisor core is now present.
+
+Delivered foundation:
+- principal policy is loaded outside the writable workspace;
+- Bubblewrap namespace/mount sandbox;
+- network deny by default;
+- policy-gated host network and read-only host mounts;
+- persistent verified audit chain;
+- SHA-256 content-addressed stdout/stderr store;
+- wall-clock timeout and optional prlimit resource limits;
+- CLI supervise command and confinement demo.
+
+Remaining before Phase 1 is closed:
+- hardened centralized/single-owner audit service;
+- stronger sandbox profile testing across distributions;
+- supervisor service lifecycle and recovery integration;
+- explicit host prerequisite/health command;
+- integration test running the real sandbox in CI or a dedicated Linux test runner.
 
 Exit:
 - Developer AI writes only task workspace;

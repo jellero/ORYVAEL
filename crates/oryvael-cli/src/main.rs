@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_protocol::{Operation, Principal};
+use oryvael_supervisor::run_from_files;
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
@@ -28,6 +29,12 @@ enum Command {
     },
     AuditVerify {
         file: String,
+    },
+    Supervise {
+        #[arg(long)]
+        principal: String,
+        #[arg(long)]
+        job: String,
     },
 }
 
@@ -74,6 +81,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             let ledger = AuditLedger::from_records(records);
             ledger.verify()?;
             println!("audit chain valid: {} records", ledger.records().len());
+        }
+        Command::Supervise { principal, job } => {
+            let result = run_from_files(principal, job)?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            if !result.success {
+                process::exit(3);
+            }
         }
     }
 
