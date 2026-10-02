@@ -244,10 +244,12 @@ mod tests {
     fn c2_requires_independent_verification() {
         let package = build(&plan(ChangeClass::C2), evidence("developer-ai/1"));
         assert!(!package.eligible);
-        assert!(package
-            .eligibility_reasons
-            .iter()
-            .any(|reason| reason.contains("test is not independent")));
+        assert!(
+            package
+                .eligibility_reasons
+                .iter()
+                .any(|reason| reason.contains("test is not independent"))
+        );
     }
 
     #[test]
@@ -270,7 +272,9 @@ mod tests {
         assert!(!package.eligible);
 
         let mut approved = evidence("test-ai/1");
-        approved.human_approvals.push("human-approval:example".into());
+        approved
+            .human_approvals
+            .push("human-approval:example".into());
         assert!(build(&plan(ChangeClass::C3), approved).eligible);
     }
 }
