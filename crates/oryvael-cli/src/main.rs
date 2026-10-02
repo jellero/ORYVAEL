@@ -5,6 +5,7 @@ use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_protocol::{Operation, Principal};
 use oryvael_supervisor::{host_status, run_from_files};
+use oryvael_tool_broker::run_brokered_from_files;
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
@@ -37,6 +38,14 @@ enum Command {
         job: String,
     },
     SupervisorDoctor,
+    ToolRun {
+        #[arg(long)]
+        principal: String,
+        #[arg(long)]
+        catalog: String,
+        #[arg(long)]
+        invocation: String,
+    },
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -95,6 +104,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{}", serde_json::to_string_pretty(&status)?);
             if !status.ready_for_basic_sandbox {
                 process::exit(2);
+            }
+        }
+        Command::ToolRun {
+            principal,
+            catalog,
+            invocation,
+        } => {
+            let result = run_brokered_from_files(principal, catalog, invocation)?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
+            if !result.success {
+                process::exit(3);
             }
         }
     }
