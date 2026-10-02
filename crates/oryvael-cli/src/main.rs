@@ -4,10 +4,14 @@ use clap::{Parser, Subcommand};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_protocol::{Operation, Principal};
-use std::{error::Error, fs, process};
+use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
-#[command(name = "oryvael", version, about = "ORYVAEL trusted-core reference CLI")]
+#[command(
+    name = "oryvael",
+    version,
+    about = "ORYVAEL trusted-core reference CLI"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -58,8 +62,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 if line.trim().is_empty() {
                     continue;
                 }
-                let record: AuditRecord = serde_json::from_str(line)
-                    .map_err(|error| format!("invalid audit JSON at line {}: {error}", index + 1))?;
+                let record: AuditRecord = serde_json::from_str(line).map_err(|error| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid audit JSON at line {}: {error}", index + 1),
+                    )
+                })?;
                 records.push(record);
             }
 
