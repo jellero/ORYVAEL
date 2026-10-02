@@ -38,6 +38,63 @@ jobs:
       - name: Validate architecture contract
         run: cargo run -p oryvael-cli -- arch-check architecture/system.json
 
+      - name: Build eligible C2 proof package
+        run: |
+          cargo run -p oryvael-cli -- proof-build \
+            --plan examples/proof/c2-plan.json \
+            --evidence examples/proof/c2-evidence.json \
+            > /tmp/oryvael-proof.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-proof.json", "r", encoding="utf-8") as handle:
+              proof = json.load(handle)
+
+          assert proof["eligible"] is True
+          assert proof["eligibility_reasons"] == []
+          assert proof["change_id"] == "CHG-PROOF-DEMO-001"
+          principals = {item["principal"] for item in proof["verifiers"]}
+          assert "test-ai/proof-demo" in principals
+          assert "security-ai/proof-demo" in principals
+          PY
+
+      - name: Verify producer cannot satisfy independent C2 verification
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("examples/proof/c2-evidence.json", "r", encoding="utf-8") as handle:
+              evidence = json.load(handle)
+
+          evidence["verifiers"][0]["principal"] = "developer-ai/proof-demo"
+
+          with open("/tmp/oryvael-ineligible-evidence.json", "w", encoding="utf-8") as handle:
+              json.dump(evidence, handle)
+          PY
+
+          set +e
+          cargo run -p oryvael-cli -- proof-build \
+            --plan examples/proof/c2-plan.json \
+            --evidence /tmp/oryvael-ineligible-evidence.json \
+            > /tmp/oryvael-ineligible-proof.json
+          status=$?
+          set -e
+          test "$status" -eq 4
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-ineligible-proof.json", "r", encoding="utf-8") as handle:
+              proof = json.load(handle)
+
+          assert proof["eligible"] is False
+          assert any(
+              "test is not independent from producer" in reason
+              for reason in proof["eligibility_reasons"]
+          )
+          PY
+
   sandbox-smoke:
     runs-on: ubuntu-latest
     steps:
