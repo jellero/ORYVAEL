@@ -1,0 +1,8 @@
+{
+  "principal": "developer-ai/workspace-demo",
+  "change_id": "CHG-WORKSPACE-DEMO-001",
+  "change_plan": "examples/workspace/change-plan.json",
+  "repository_id": "oryvael-demo",
+  "base_ref": "main",
+  "audit_log": "/tmp/oryvael-workspace-control/audit.jsonl"
+}
