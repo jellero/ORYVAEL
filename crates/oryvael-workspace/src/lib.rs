@@ -491,7 +491,12 @@ fn absolute_path(path: &Path) -> Result<PathBuf, std::io::Error> {
 
 fn new_operation_id() -> String {
     let counter = OP_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("workspace-{:x}-{:x}-{:x}", now_ns(), std::process::id(), counter)
+    format!(
+        "workspace-{:x}-{:x}-{:x}",
+        now_ns(),
+        std::process::id(),
+        counter
+    )
 }
 
 fn now_ns() -> u64 {
