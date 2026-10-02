@@ -37,7 +37,10 @@
       }
     },
     "network": {
-      "enum": ["deny", "host"]
+      "enum": [
+        "deny",
+        "host"
+      ]
     },
     "read_only_paths": {
       "type": "array",
@@ -55,15 +58,24 @@
       "additionalProperties": false,
       "properties": {
         "memory_bytes": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "cpu_seconds": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         },
         "file_size_bytes": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 1
         }
       }
@@ -75,6 +87,41 @@
     "artifact_store": {
       "type": "string",
       "minLength": 1
+    },
+    "required_operations": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource",
+          "action"
+        ],
+        "properties": {
+          "resource": {
+            "type": "string",
+            "minLength": 1
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "audit_context": {
+      "type": "object",
+      "default": {},
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   }
 }
