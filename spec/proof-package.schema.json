@@ -153,7 +153,10 @@
       "required": [
         "manifest_sha256",
         "sbom_sha256",
-        "cargo_lock_sha256"
+        "cargo_lock_sha256",
+        "reproducible",
+        "independent_builder",
+        "reproducible_manifest_sha256"
       ],
       "properties": {
         "manifest_sha256": {
@@ -166,6 +169,22 @@
         },
         "cargo_lock_sha256": {
           "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "reproducible": {
+          "type": "boolean"
+        },
+        "independent_builder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reproducible_manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^[a-fA-F0-9]{64}$"
         }
       }
