@@ -104,6 +104,62 @@ jobs:
           assert "/home/runner/" not in encoded
           PY
 
+      - name: Verify independent reproducible builds
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("examples/build/input.json", "r", encoding="utf-8") as handle:
+              data = json.load(handle)
+
+          data["builder_principal"] = "build-service/independent"
+          data["cargo_metadata"] = "/tmp/oryvael-build-metadata-copy.json"
+          data["artifacts"][0]["path"] = "/tmp/oryvael-demo-build-alt/oryvael-demo.img"
+
+          with open("/tmp/oryvael-build-input-independent.json", "w", encoding="utf-8") as handle:
+              json.dump(data, handle)
+          PY
+
+          cargo run --locked -p oryvael-cli -- build-manifest             --plan examples/build/c1-plan.json             --input /tmp/oryvael-build-input-independent.json             > /tmp/oryvael-build-manifest-independent.json
+
+          cargo run --locked -p oryvael-cli -- build-compare             --left /tmp/oryvael-build-manifest-a.json             --right /tmp/oryvael-build-manifest-independent.json             > /tmp/oryvael-reproducibility.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-reproducibility.json", "r", encoding="utf-8") as handle:
+              report = json.load(handle)
+
+          assert report["reproducible"] is True
+          assert report["independent_builders"] is True
+          assert report["artifact_hashes_match"] is True
+          assert report["sbom_match"] is True
+          assert report["reasons"] == []
+          PY
+
+      - name: Verify artifact mismatch vetoes reproducibility
+        run: |
+          printf 'mutated artifact bytes\n'             > /tmp/oryvael-demo-build-alt/oryvael-demo.img
+
+          cargo run --locked -p oryvael-cli -- build-manifest             --plan examples/build/c1-plan.json             --input /tmp/oryvael-build-input-independent.json             > /tmp/oryvael-build-manifest-mutated.json
+
+          set +e
+          cargo run --locked -p oryvael-cli -- build-compare             --left /tmp/oryvael-build-manifest-a.json             --right /tmp/oryvael-build-manifest-mutated.json             > /tmp/oryvael-reproducibility-mutated.json
+          status=$?
+          set -e
+          test "$status" -eq 7
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-reproducibility-mutated.json", "r", encoding="utf-8") as handle:
+              report = json.load(handle)
+
+          assert report["reproducible"] is False
+          assert report["artifact_hashes_match"] is False
+          assert any("artifact hashes differ" in reason for reason in report["reasons"])
+          PY
+
       - name: Verify AI cannot inject a declared dependency list
         run: |
           python - <<'PY'
