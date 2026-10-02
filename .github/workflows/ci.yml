@@ -473,6 +473,116 @@ jobs:
           set -e
           test "$status" -ne 0
 
+      - name: Run C2 verifier for audited proof gate
+        run: |
+          sudo rm -rf /tmp/oryvael-audited-proof-control
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/tool-broker/test-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/audited-proof/test-invocation.json \
+            > /tmp/oryvael-audited-proof-run.json
+
+      - name: Build release-grade audited C2 proof
+        run: |
+          operation_id="$(python - <<'PY'
+          import json
+          with open("/tmp/oryvael-audited-proof-run.json", "r", encoding="utf-8") as handle:
+              print(json.load(handle)["operation_id"])
+          PY
+          )"
+
+          python - "$operation_id" <<'PY'
+          import json
+          import sys
+
+          operation_id = sys.argv[1]
+          payload = {
+              "source": {
+                  "repository": "jellero/ORYVAEL",
+                  "commit": "audited-proof-demo-source",
+                  "tree": None,
+              },
+              "verifier_runs": [
+                  {
+                      "audit_log": "/tmp/oryvael-audited-proof-control/audit.jsonl",
+                      "operation_id": operation_id,
+                  }
+              ],
+              "artifacts": [
+                  {
+                      "name": "audited-proof-demo.img",
+                      "sha256": "d" * 64,
+                  }
+              ],
+              "human_approvals": [],
+          }
+
+          with open("/tmp/oryvael-audited-proof-input.json", "w", encoding="utf-8") as handle:
+              json.dump(payload, handle)
+          PY
+
+          sudo ./target/debug/oryvael proof-build-audited \
+            --plan examples/audited-proof/c2-plan.json \
+            --input /tmp/oryvael-audited-proof-input.json \
+            > /tmp/oryvael-audited-proof.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-audited-proof.json", "r", encoding="utf-8") as handle:
+              proof = json.load(handle)
+
+          assert proof["eligible"] is True
+          assert proof["evidence_verified"] is True
+          assert len(proof["change_plan_sha256"]) == 64
+          assert proof["eligibility_reasons"] == []
+          assert len(proof["verifiers"]) == 1
+
+          verifier = proof["verifiers"][0]
+          assert verifier["name"] == "python.syntax-check"
+          assert verifier["principal"] == "test-ai/tool-demo"
+          assert verifier["status"] == "pass"
+          assert len(verifier["evidence_hash"]) == 64
+          PY
+
+      - name: Verify audited evidence cannot be replayed against modified plan
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("examples/audited-proof/c2-plan.json", "r", encoding="utf-8") as handle:
+              plan = json.load(handle)
+
+          plan["intent"] = "Modified plan bytes after verifier execution"
+
+          with open("/tmp/oryvael-modified-audited-plan.json", "w", encoding="utf-8") as handle:
+              json.dump(plan, handle, indent=2)
+              handle.write("\n")
+          PY
+
+          set +e
+          sudo ./target/debug/oryvael proof-build-audited \
+            --plan /tmp/oryvael-modified-audited-plan.json \
+            --input /tmp/oryvael-audited-proof-input.json \
+            > /tmp/oryvael-replayed-proof.json
+          status=$?
+          set -e
+          test "$status" -eq 4
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-replayed-proof.json", "r", encoding="utf-8") as handle:
+              proof = json.load(handle)
+
+          assert proof["eligible"] is False
+          assert proof["evidence_verified"] is True
+          assert any(
+              "change-plan hash does not match evaluated plan" in reason
+              for reason in proof["eligibility_reasons"]
+          )
+          PY
+
       - name: Verify catalog and plan cannot replace principal authority
         run: |
           python - <<'PY'
