@@ -11,7 +11,8 @@
   ],
   "requested_capabilities": [
     "tool:python.syntax-check",
-    "build:manifest"
+    "build:manifest",
+    "build:reproducible"
   ],
   "dependencies_added": [],
   "verification": [
