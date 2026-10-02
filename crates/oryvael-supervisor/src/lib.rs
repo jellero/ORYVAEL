@@ -53,6 +53,10 @@ pub struct JobSpec {
     pub timeout_seconds: u64,
     #[serde(default)]
     pub limits: ResourceLimits,
+    #[serde(default)]
+    pub required_operations: Vec<Operation>,
+    #[serde(default)]
+    pub audit_context: BTreeMap<String, String>,
     pub audit_log: PathBuf,
     pub artifact_store: PathBuf,
 }
@@ -352,6 +356,9 @@ fn run_job_with_context(
     if let Some(hash) = job_hash {
         start_metadata.insert("job_spec_sha256".into(), hash);
     }
+    for (key, value) in &spec.audit_context {
+        start_metadata.insert(format!("context.{key}"), value.clone());
+    }
 
     audit.append(AuditEvent {
         timestamp_ns: now_ns(),
@@ -413,6 +420,16 @@ fn run_job_with_context(
                 action: "read".into(),
                 target: Some(source.to_string_lossy().into_owned()),
             },
+        )?;
+    }
+
+    for operation in &spec.required_operations {
+        authorize(
+            &mut audit,
+            &principal,
+            &spec.change_id,
+            &operation_id,
+            operation.clone(),
         )?;
     }
 
@@ -919,6 +936,8 @@ mod tests {
             read_only_paths: vec![],
             timeout_seconds: 10,
             limits: ResourceLimits::default(),
+            required_operations: vec![],
+            audit_context: BTreeMap::new(),
             audit_log: PathBuf::from("/tmp/oryvael-test-audit.jsonl"),
             artifact_store: PathBuf::from("/tmp/oryvael-test-artifacts"),
         }
