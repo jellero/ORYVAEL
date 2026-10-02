@@ -2,67 +2,116 @@
 
 ## Phase 0 — Architecture foundation
 
-Deliver Constitution, trust model, schemas, Architecture Compiler skeleton, Rust workspace and CI.
+Status: complete for the reference foundation.
 
-Exit: schemas valid; crates compile/test; core invariants have test IDs.
+Delivered:
+- Constitution v0.1;
+- trust model;
+- machine-readable schemas;
+- Architecture Compiler;
+- Rust workspace;
+- policy and audit primitives;
+- CI gates.
+
+Evidence gate:
+- formatting, compilation, Clippy and tests pass;
+- schemas parse;
+- architecture/system.json is validated in CI.
 
 ## Phase 1 — Local Trusted Supervisor
 
-Status: implementation in progress; the first Linux supervisor core is now present.
+Status: alpha implementation complete; hardening continues.
 
-Delivered foundation:
-- principal policy is loaded outside the writable workspace;
-- Bubblewrap namespace/mount sandbox;
+Delivered:
+- principal identity and external policy input;
+- Linux namespace/mount sandbox;
+- read-only sandbox root with one writable task workspace;
 - network deny by default;
-- policy-gated host network and read-only host mounts;
-- persistent verified audit chain;
-- SHA-256 content-addressed stdout/stderr store;
-- wall-clock timeout and optional prlimit resource limits;
-- CLI supervise command and confinement demo.
+- policy-gated host networking;
+- policy-gated read-only host mounts;
+- verified persistent audit chain;
+- SHA-256 content-addressed stdout/stderr artifacts;
+- wall-clock timeout;
+- optional prlimit memory/CPU/file-size limits;
+- supervisor host preflight;
+- CLI supervise/doctor commands;
+- real Linux confinement smoke test in CI;
+- negative tests for network self-grant and worker-writable control files.
 
-Remaining before Phase 1 is closed:
-- hardened centralized/single-owner audit service;
-- stronger sandbox profile testing across distributions;
-- supervisor service lifecycle and recovery integration;
-- explicit host prerequisite/health command;
-- integration test running the real sandbox in CI or a dedicated Linux test runner.
+Phase 1 exit criteria and current evidence:
+- Developer AI writes only the task workspace: verified by real sandbox smoke test.
+- Network deny is enforceable: verified by real socket attempt inside the sandbox.
+- Every privileged operation has an audit ID: verified by audit assertions in CI.
+- Agent cannot self-grant: verified by requesting host networking under an explicit network deny and requiring rejection.
 
-Exit:
-- Developer AI writes only task workspace;
-- enforceable network deny;
-- every privileged operation has audit ID;
-- agent cannot self-grant.
+Hardening carried into Phase 1.x / Phase 2:
+- persistent supervisor daemon/service interface;
+- single-owner centralized audit service and external checkpoints;
+- distribution/hardware compatibility matrix;
+- seccomp/Landlock defense in depth;
+- cgroup-v2 accounting and lifecycle cleanup.
 
 ## Phase 2 — AI Development Factory
 
-Deliver Architect/Developer/Test/Security/Reviewer roles, change-plan engine, proof-package generator, reproducible workers and SBOM service.
+Next target.
 
-Exit: a C1 component is generated, independently verified and packaged end-to-end without AI host-admin access.
+Deliver:
+- brokered Tool Executor;
+- Architect, Developer, Test, Security and Reviewer principals;
+- immutable change-plan binding;
+- proof-package generator;
+- protected verifier results;
+- Git branch/worktree broker;
+- compiler/test/fuzz broker;
+- reproducible build workers;
+- dependency/SBOM service;
+- release eligibility engine.
+
+Exit:
+- a C1 ORYVAEL component is generated, independently verified and packaged end-to-end without the AI receiving host-admin authority;
+- implementation and verification principals are independently attributable;
+- all tool invocations are capability checked and audited.
 
 ## Phase 3 — Immutable Desktop Prototype
 
-Deliver bootable image, A/B updates, recovery, Desktop shell, app runtime, development workspace and dashboards.
+Deliver bootable image, A/B updates, recovery, Desktop shell, app runtime, development workspace and observability dashboards.
 
-Exit: fault-injected rollback works; app capability UI works; staged test-fleet rollout works.
+Exit:
+- fault-injected rollback works;
+- app capability UI works;
+- staged test-fleet rollout works.
 
 ## Phase 4 — Desktop Alpha
 
 Deliver hardware matrix, GPU/Wayland path, secrets/passkeys, signed apps and user governance console.
 
-Exit: daily-driver pilot on defined hardware and independent Trusted Core review.
+Exit:
+- daily-driver pilot on defined hardware;
+- independent Trusted Core security review;
+- measurable recovery objectives.
 
 ## Phase 5 — ARM64 Mobile Prototype
 
 Deliver Mobile shell, telephony/sensor/camera brokers, energy/background policy and secure-element integration.
 
-Exit: common app/capability contracts work on Desktop and Mobile; continuity does not transfer privilege.
+Exit:
+- common app/capability contracts work on Desktop and Mobile;
+- continuity transfers state without silently transferring privilege.
 
 ## Phase 6 — Kernel Decision
 
-Evaluate Linux versus custom kernel using TCB size, vulnerabilities, driver burden, capability semantics, performance, energy, maintainability and formal-verification feasibility.
+Evaluate Linux versus a custom kernel using:
+- TCB size;
+- vulnerability exposure;
+- driver burden;
+- capability semantics;
+- performance;
+- energy;
+- maintainability;
+- formal-verification feasibility.
 
-A custom kernel proceeds only if evidence justifies cost.
+A custom kernel proceeds only if evidence justifies its cost.
 
 ## Long-term target
 
-Routine maintenance may be predominantly AI-operated while C3/C4 authority, root keys, attribution and release evidence remain under explicit human governance.
+Routine implementation and maintenance may become predominantly AI-operated while C3/C4 authority, root keys, attribution and release evidence remain explicitly human governed.
