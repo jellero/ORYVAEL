@@ -3,10 +3,10 @@
 use clap::{Parser, Subcommand};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
+use oryvael_proof::build_from_files;
 use oryvael_protocol::{Operation, Principal};
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
-use oryvael_proof::build_from_files;
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
