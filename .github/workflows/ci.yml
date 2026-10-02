@@ -163,10 +163,18 @@ jobs:
 
       - name: Run capability-bound tool
         run: |
+          set +e
           sudo ./target/debug/oryvael tool-run \
             --principal examples/tool-broker/developer-principal.json \
             --catalog examples/tool-broker/catalog.json \
             --invocation examples/tool-broker/invocation.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "--- brokered tool stderr ---"
+            sudo cat /tmp/oryvael-tool-demo-workspace/.oryvael/runtime/*.stderr || true
+            exit "$status"
+          fi
 
       - name: Verify brokered action and audit binding
         run: |
