@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/tool-catalog.schema.json",
+  "title": "ORYVAEL Tool Catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tools"],
+  "properties": {
+    "version": {"type": "string", "minLength": 1},
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "executable", "actions"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+          "executable": {"type": "string", "pattern": "^/"},
+          "actions": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["argv", "network", "read_only_paths", "timeout_seconds", "limits"],
+              "properties": {
+                "argv": {"type": "array", "items": {"type": "string"}},
+                "network": {"enum": ["deny", "host"]},
+                "read_only_paths": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+                "timeout_seconds": {"type": "integer", "minimum": 1},
+                "limits": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "memory_bytes": {"type": ["integer", "null"], "minimum": 1},
+                    "cpu_seconds": {"type": ["integer", "null"], "minimum": 1},
+                    "file_size_bytes": {"type": ["integer", "null"], "minimum": 1}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
