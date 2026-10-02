@@ -45,7 +45,9 @@ fn grant_matches(grant: &CapabilityGrant, operation: &Operation) -> bool {
         .iter()
         .any(|action| action == "*" || action == &operation.action);
 
-    resource_matches && action_matches && scope_matches(grant.scope.as_deref(), operation.target.as_deref())
+    resource_matches
+        && action_matches
+        && scope_matches(grant.scope.as_deref(), operation.target.as_deref())
 }
 
 fn scope_matches(scope: Option<&str>, target: Option<&str>) -> bool {
@@ -82,7 +84,12 @@ mod tests {
         }
     }
 
-    fn grant(effect: Effect, resource: &str, actions: &[&str], scope: Option<&str>) -> CapabilityGrant {
+    fn grant(
+        effect: Effect,
+        resource: &str,
+        actions: &[&str],
+        scope: Option<&str>,
+    ) -> CapabilityGrant {
         CapabilityGrant {
             effect,
             resource: resource.into(),
@@ -97,7 +104,11 @@ mod tests {
     fn default_is_deny() {
         let decision = evaluate(
             &principal(vec![]),
-            &Operation { resource: "source".into(), action: "read".into(), target: None },
+            &Operation {
+                resource: "source".into(),
+                action: "read".into(),
+                target: None,
+            },
         );
         assert!(!decision.allowed);
     }
@@ -106,7 +117,12 @@ mod tests {
     fn explicit_deny_overrides_allow() {
         let p = principal(vec![
             grant(Effect::Allow, "source", &["write"], Some("/workspace/**")),
-            grant(Effect::Deny, "source", &["write"], Some("/workspace/protected/**")),
+            grant(
+                Effect::Deny,
+                "source",
+                &["write"],
+                Some("/workspace/protected/**"),
+            ),
         ]);
         let decision = evaluate(
             &p,
@@ -129,22 +145,28 @@ mod tests {
             Some("/workspace/change-1/**"),
         )]);
 
-        assert!(evaluate(
-            &p,
-            &Operation {
-                resource: "source".into(),
-                action: "write".into(),
-                target: Some("/workspace/change-1/file.rs".into()),
-            },
-        ).allowed);
+        assert!(
+            evaluate(
+                &p,
+                &Operation {
+                    resource: "source".into(),
+                    action: "write".into(),
+                    target: Some("/workspace/change-1/file.rs".into()),
+                },
+            )
+            .allowed
+        );
 
-        assert!(!evaluate(
-            &p,
-            &Operation {
-                resource: "source".into(),
-                action: "write".into(),
-                target: Some("/etc/passwd".into()),
-            },
-        ).allowed);
+        assert!(
+            !evaluate(
+                &p,
+                &Operation {
+                    resource: "source".into(),
+                    action: "write".into(),
+                    target: Some("/etc/passwd".into()),
+                },
+            )
+            .allowed
+        );
     }
 }
