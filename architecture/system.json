@@ -155,10 +155,12 @@
       "id": "oryvael-proof",
       "layer": "trusted_core",
       "dependencies": [
-        "oryvael-protocol"
+        "oryvael-protocol",
+        "oryvael-evidence"
       ],
       "allowed_dependencies": [
-        "oryvael-protocol"
+        "oryvael-protocol",
+        "oryvael-evidence"
       ],
       "forbidden_dependencies": [
         "oryvael-cli",
