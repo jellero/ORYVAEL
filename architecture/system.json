@@ -162,11 +162,13 @@
       "layer": "trusted_core",
       "dependencies": [
         "oryvael-protocol",
-        "oryvael-evidence"
+        "oryvael-evidence",
+        "oryvael-build"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
-        "oryvael-evidence"
+        "oryvael-evidence",
+        "oryvael-build"
       ],
       "forbidden_dependencies": [
         "oryvael-cli",
@@ -267,7 +269,7 @@
     },
     {
       "id": "oryvael-build",
-      "layer": "system_service",
+      "layer": "trusted_core",
       "dependencies": [
         "oryvael-protocol"
       ],
