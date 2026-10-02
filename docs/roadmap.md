@@ -55,8 +55,20 @@ Hardening carried into Phase 1.x / Phase 2:
 
 Next target.
 
-Deliver:
-- brokered Tool Executor;
+Status: implementation in progress; the first capability-bound Tool Broker is present.
+
+Delivered foundation:
+- named tool/action catalog; no arbitrary command surface;
+- change-plan hash binding;
+- developer action must be explicitly requested by the plan;
+- Test/Security/Reviewer roles must differ from the producer;
+- supervisor-enforced `tool.execute` capability;
+- tool/catalog/invocation/principal hashes recorded in audit context;
+- fixed argv, network policy, timeout and resource limits per catalog action.
+
+Next deliverables:
+- brokered Git worktree/branch operations;
+- Rust compiler/test/fuzz profiles;
 - Architect, Developer, Test, Security and Reviewer principals;
 - immutable change-plan binding;
 - proof-package generator;
