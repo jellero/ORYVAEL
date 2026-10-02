@@ -95,6 +95,17 @@ pub struct BuildManifest {
     pub manifest_sha256: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReproducibilityReport {
+    pub reproducible: bool,
+    pub independent_builders: bool,
+    pub left_manifest_sha256: String,
+    pub right_manifest_sha256: String,
+    pub artifact_hashes_match: bool,
+    pub sbom_match: bool,
+    pub reasons: Vec<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct CargoMetadata {
     packages: Vec<MetadataPackage>,
@@ -251,6 +262,86 @@ pub fn build_from_files(
         sbom,
         manifest_sha256,
     })
+}
+
+pub fn compare_from_files(
+    left_path: impl AsRef<Path>,
+    right_path: impl AsRef<Path>,
+) -> Result<ReproducibilityReport, BuildManifestError> {
+    let left: BuildManifest = serde_json::from_slice(&fs::read(left_path)?)?;
+    let right: BuildManifest = serde_json::from_slice(&fs::read(right_path)?)?;
+    Ok(compare(&left, &right))
+}
+
+pub fn compare(left: &BuildManifest, right: &BuildManifest) -> ReproducibilityReport {
+    let mut reasons = Vec::new();
+
+    if left.change_id != right.change_id {
+        reasons.push("change id differs".into());
+    }
+    if left.change_plan_sha256 != right.change_plan_sha256 {
+        reasons.push("change-plan hash differs".into());
+    }
+    if left.source != right.source {
+        reasons.push("source identity differs".into());
+    }
+    if left.toolchain != right.toolchain {
+        reasons.push("toolchain identity differs".into());
+    }
+    if left.target != right.target {
+        reasons.push("target differs".into());
+    }
+    if left.profile != right.profile {
+        reasons.push("build profile differs".into());
+    }
+    if left.build_command != right.build_command {
+        reasons.push("build command differs".into());
+    }
+    if left.cargo_lock_sha256 != right.cargo_lock_sha256 {
+        reasons.push("Cargo.lock hash differs".into());
+    }
+
+    let independent_builders = left.builder_principal != right.builder_principal;
+    if !independent_builders {
+        reasons.push("builds are not independently attributed".into());
+    }
+
+    let sbom_match =
+        left.sbom.sha256 == right.sbom.sha256 && left.sbom.components == right.sbom.components;
+    if !sbom_match {
+        reasons.push("SBOM differs".into());
+    }
+
+    let artifact_hashes_match =
+        artifact_identity(&left.artifacts) == artifact_identity(&right.artifacts);
+    if !artifact_hashes_match {
+        reasons.push("artifact hashes differ".into());
+    }
+
+    ReproducibilityReport {
+        reproducible: reasons.is_empty(),
+        independent_builders,
+        left_manifest_sha256: left.manifest_sha256.clone(),
+        right_manifest_sha256: right.manifest_sha256.clone(),
+        artifact_hashes_match,
+        sbom_match,
+        reasons,
+    }
+}
+
+fn artifact_identity(artifacts: &[ArtifactDigest]) -> Vec<(&str, &str, u64)> {
+    let mut identity = artifacts
+        .iter()
+        .map(|artifact| {
+            (
+                artifact.name.as_str(),
+                artifact.sha256.as_str(),
+                artifact.bytes,
+            )
+        })
+        .collect::<Vec<_>>();
+    identity.sort_unstable();
+    identity
 }
 
 fn validate_input(input: &BuildManifestInput) -> Result<(), BuildManifestError> {
@@ -475,6 +566,54 @@ mod tests {
             ),
             "cargo:serde@1.0.229#registry+https://github.com/rust-lang/crates.io-index"
         );
+    }
+
+    #[test]
+    fn reproducibility_requires_independent_matching_builds() {
+        let base = BuildManifest {
+            version: MANIFEST_VERSION.into(),
+            change_id: "CHG-1".into(),
+            change_plan_sha256: "a".repeat(64),
+            normalized_input_sha256: "b".repeat(64),
+            cargo_lock_sha256: "c".repeat(64),
+            builder_principal: "build/one".into(),
+            source: SourceIdentity {
+                repository: "repo".into(),
+                commit: "commit".into(),
+                tree: None,
+            },
+            toolchain: ToolchainIdentity {
+                name: "rust".into(),
+                version: "1.85.0".into(),
+                sha256: None,
+            },
+            target: "x86_64-unknown-linux-gnu".into(),
+            profile: "release".into(),
+            build_command: vec!["cargo".into(), "build".into(), "--locked".into()],
+            artifacts: vec![ArtifactDigest {
+                name: "image".into(),
+                sha256: "d".repeat(64),
+                bytes: 1,
+            }],
+            sbom: Sbom {
+                format: SBOM_FORMAT.into(),
+                components: vec![],
+                sha256: "e".repeat(64),
+            },
+            manifest_sha256: "f".repeat(64),
+        };
+
+        let mut independent = base.clone();
+        independent.builder_principal = "build/two".into();
+        independent.normalized_input_sha256 = "1".repeat(64);
+        independent.manifest_sha256 = "2".repeat(64);
+        assert!(compare(&base, &independent).reproducible);
+
+        let mut changed = independent;
+        changed.artifacts[0].sha256 = "0".repeat(64);
+        let report = compare(&base, &changed);
+        assert!(!report.reproducible);
+        assert!(!report.artifact_hashes_match);
     }
 
     #[test]
