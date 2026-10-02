@@ -1,0 +1,30 @@
+{
+  "source": {
+    "repository": "jellero/ORYVAEL",
+    "commit": "example-source-commit",
+    "tree": null
+  },
+  "verifiers": [
+    {
+      "name": "test",
+      "principal": "test-ai/proof-demo",
+      "status": "pass",
+      "evidence_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "operation_id": "op-test-proof-demo"
+    },
+    {
+      "name": "security",
+      "principal": "security-ai/proof-demo",
+      "status": "pass",
+      "evidence_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "operation_id": "op-security-proof-demo"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "oryvael-proof-demo.img",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "human_approvals": []
+}
