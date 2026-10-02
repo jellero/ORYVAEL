@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/audited-proof-input.schema.json",
+  "title": "ORYVAEL Audited Proof Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "verifier_runs", "artifacts", "human_approvals"],
+  "properties": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "minLength": 1},
+        "tree": {"type": ["string", "null"]}
+      }
+    },
+    "verifier_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["audit_log", "operation_id"],
+        "properties": {
+          "audit_log": {"type": "string", "minLength": 1},
+          "operation_id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+        }
+      }
+    },
+    "human_approvals": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}
