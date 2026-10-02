@@ -1,0 +1,10 @@
+{
+  "version": "1",
+  "repositories": [
+    {
+      "id": "oryvael-demo",
+      "path": "/tmp/oryvael-workspace-source",
+      "workspace_root": "/tmp/oryvael-worktrees"
+    }
+  ]
+}
