@@ -89,8 +89,10 @@ pub struct SandboxCommand {
 pub struct HostStatus {
     pub linux: bool,
     pub bubblewrap_available: bool,
+    pub unshare_available: bool,
     pub prlimit_available: bool,
     pub user_namespace_hint: Option<bool>,
+    pub namespace_probe: bool,
     pub ready_for_basic_sandbox: bool,
     pub ready_for_resource_limits: bool,
 }
@@ -250,20 +252,22 @@ impl ArtifactStore {
 pub fn host_status() -> HostStatus {
     let linux = cfg!(target_os = "linux");
     let bubblewrap_available = program_available("bwrap", "--version");
+    let unshare_available = program_available("unshare", "--version");
     let prlimit_available = program_available("prlimit", "--version");
     let user_namespace_hint = user_namespace_hint();
-    let namespace_allowed = user_namespace_hint.unwrap_or(true);
+    let namespace_probe = linux && unshare_available && probe_isolated_namespaces();
+    let ready_for_basic_sandbox =
+        linux && bubblewrap_available && unshare_available && namespace_probe;
 
     HostStatus {
         linux,
         bubblewrap_available,
+        unshare_available,
         prlimit_available,
         user_namespace_hint,
-        ready_for_basic_sandbox: linux && bubblewrap_available && namespace_allowed,
-        ready_for_resource_limits: linux
-            && bubblewrap_available
-            && prlimit_available
-            && namespace_allowed,
+        namespace_probe,
+        ready_for_basic_sandbox,
+        ready_for_resource_limits: ready_for_basic_sandbox && prlimit_available,
     }
 }
 
@@ -607,16 +611,12 @@ pub fn build_sandbox_command(
     let mut bwrap = vec![
         "--die-with-parent".into(),
         "--new-session".into(),
-        "--unshare-user".into(),
         "--unshare-pid".into(),
         "--unshare-ipc".into(),
         "--unshare-uts".into(),
         "--unshare-cgroup-try".into(),
+        "--disable-userns".into(),
     ];
-
-    if spec.network == NetworkMode::Deny {
-        bwrap.push("--unshare-net".into());
-    }
 
     bwrap.extend([
         "--proc".into(),
@@ -674,6 +674,14 @@ pub fn build_sandbox_command(
         bwrap.push(part.into());
     }
 
+    let mut unshare = vec!["--map-root-user".into()];
+    if spec.network == NetworkMode::Deny {
+        unshare.push("--net".into());
+    }
+    unshare.push("--".into());
+    unshare.push("bwrap".into());
+    unshare.extend(bwrap);
+
     if has_limits(&spec.limits) {
         let mut args = Vec::new();
 
@@ -688,8 +696,8 @@ pub fn build_sandbox_command(
         }
 
         args.push("--".into());
-        args.push("bwrap".into());
-        args.extend(bwrap);
+        args.push("unshare".into());
+        args.extend(unshare);
 
         Ok(SandboxCommand {
             program: "prlimit".into(),
@@ -697,8 +705,8 @@ pub fn build_sandbox_command(
         })
     } else {
         Ok(SandboxCommand {
-            program: "bwrap".into(),
-            args: bwrap,
+            program: "unshare".into(),
+            args: unshare,
         })
     }
 }
@@ -825,6 +833,16 @@ fn program_available(program: &str, version_arg: &str) -> bool {
         .is_ok_and(|status| status.success())
 }
 
+fn probe_isolated_namespaces() -> bool {
+    Command::new("unshare")
+        .args(["--map-root-user", "--net", "--", "true"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
 fn user_namespace_hint() -> Option<bool> {
     let clone_flag = fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
         .ok()
@@ -926,7 +944,7 @@ mod tests {
             .map(|value| value.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
 
-        assert!(args.iter().any(|arg| arg == "--unshare-net"));
+        assert!(args.iter().any(|arg| arg == "--net"));
     }
 
     #[test]
@@ -944,7 +962,7 @@ mod tests {
             .map(|value| value.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
 
-        assert!(!args.iter().any(|arg| arg == "--unshare-net"));
+        assert!(!args.iter().any(|arg| arg == "--net"));
     }
 
     #[test]
@@ -963,5 +981,6 @@ mod tests {
                 .iter()
                 .any(|arg| arg.to_string_lossy().starts_with("--as="))
         );
+        assert!(command.args.iter().any(|arg| arg == "unshare"));
     }
 }
