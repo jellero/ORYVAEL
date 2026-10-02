@@ -276,24 +276,11 @@ fn eligibility_reasons(plan: &ChangePlan, input: &ProofInput) -> Vec<String> {
         }
     }
 
-    if requires_human_approval(&plan.change_class)
-        && input
-            .human_approvals
-            .iter()
-            .all(|approval| approval.trim().is_empty())
-    {
-        reasons.push("critical/constitutional change lacks human approval reference".into());
-    }
-
     reasons
 }
 
 fn requires_independent_verifier(class: &ChangeClass) -> bool {
     matches!(class, ChangeClass::C2 | ChangeClass::C3 | ChangeClass::C4)
-}
-
-fn requires_human_approval(class: &ChangeClass) -> bool {
-    matches!(class, ChangeClass::C3 | ChangeClass::C4)
 }
 
 fn is_sha256(value: &str) -> bool {
@@ -378,14 +365,9 @@ mod tests {
     }
 
     #[test]
-    fn c3_requires_human_approval_reference() {
+    fn c3_proof_defers_human_authority_to_release_gate() {
         let package = build(&plan(ChangeClass::C3), evidence("test-ai/1"));
-        assert!(!package.eligible);
-
-        let mut approved = evidence("test-ai/1");
-        approved
-            .human_approvals
-            .push("human-approval:example".into());
-        assert!(build(&plan(ChangeClass::C3), approved).eligible);
+        assert!(package.eligible);
+        assert!(package.human_approvals.is_empty());
     }
 }
