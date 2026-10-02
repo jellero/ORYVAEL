@@ -142,6 +142,15 @@ pub fn verify(
     }
 
     let required = threshold_for(&policy.thresholds, &context.change_class);
+    if matches!(context.change_class, ChangeClass::C3 | ChangeClass::C4) && required == 0 {
+        return Ok(ApprovalVerification {
+            required,
+            valid_signers: Vec::new(),
+            eligible: false,
+            reasons: vec!["human approval threshold must be greater than zero".into()],
+            warnings: Vec::new(),
+        });
+    }
     if required == 0 {
         return Ok(ApprovalVerification {
             required,
