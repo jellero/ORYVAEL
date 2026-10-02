@@ -1,0 +1,22 @@
+id: dev.oryvael.examples.screen-report
+version: 0.1.0
+publisher: oryvael-example
+profiles: [desktop]
+capabilities:
+  - resource: screen
+    actions: [capture]
+    scope: foreground
+    user_presence: true
+
+  - resource: filesystem
+    actions: [write]
+    scope: ~/Reports/**
+    user_presence: false
+
+network:
+  default: deny
+  allowed_domains: []
+
+background:
+  allowed: false
+  budget_ms_per_hour: 0

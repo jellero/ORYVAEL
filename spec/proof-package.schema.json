@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/proof-package.schema.json",
+  "title": "ORYVAEL Proof Package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["change_id", "change_class", "source", "verifiers", "artifacts", "eligible"],
+  "properties": {
+    "change_id": {"type": "string"},
+    "change_class": {"enum": ["C0", "C1", "C2", "C3", "C4"]},
+    "source": {
+      "type": "object",
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": {"type": "string"},
+        "commit": {"type": "string"},
+        "tree": {"type": ["string", "null"]}
+      }
+    },
+    "verifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "principal", "status", "evidence_hash"],
+        "properties": {
+          "name": {"type": "string"},
+          "principal": {"type": "string"},
+          "status": {"enum": ["pass", "fail", "skipped"]},
+          "evidence_hash": {"type": "string"}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "sha256"],
+        "properties": {
+          "name": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+        }
+      }
+    },
+    "eligible": {"type": "boolean"},
+    "human_approvals": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

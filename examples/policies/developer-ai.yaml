@@ -1,0 +1,26 @@
+principal: developer-ai/example
+kind: ai_agent
+grants:
+  - effect: allow
+    resource: source
+    actions: [read, write]
+    scope: /workspace/change-example/**
+    delegable: false
+
+  - effect: allow
+    resource: tool
+    actions: [execute]
+    scope: compiler,test-runner,formatter
+    delegable: false
+
+  - effect: deny
+    resource: production
+    actions: ["*"]
+    scope: null
+    delegable: false
+
+  - effect: deny
+    resource: policy
+    actions: [write]
+    scope: constitutional
+    delegable: false

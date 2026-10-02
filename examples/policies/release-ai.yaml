@@ -1,0 +1,26 @@
+principal: release-ai/example
+kind: ai_agent
+grants:
+  - effect: allow
+    resource: artifact
+    actions: [read, assemble, verify]
+    scope: candidate/**
+    delegable: false
+
+  - effect: allow
+    resource: rollout
+    actions: [propose]
+    scope: simulator,developer,canary
+    delegable: false
+
+  - effect: deny
+    resource: source
+    actions: [write]
+    scope: /**
+    delegable: false
+
+  - effect: deny
+    resource: root-signing-key
+    actions: ["*"]
+    scope: null
+    delegable: false

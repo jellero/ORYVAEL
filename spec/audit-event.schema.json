@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/audit-event.schema.json",
+  "title": "ORYVAEL Audit Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["timestamp_ns", "actor", "action", "target", "decision", "metadata"],
+  "properties": {
+    "timestamp_ns": {"type": "integer", "minimum": 0},
+    "actor": {"type": "string", "minLength": 1},
+    "action": {"type": "string", "minLength": 1},
+    "target": {"type": "string"},
+    "decision": {"enum": ["allowed", "denied", "observed", "failed"]},
+    "change_id": {"type": ["string", "null"]},
+    "operation_id": {"type": ["string", "null"]},
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    }
+  }
+}

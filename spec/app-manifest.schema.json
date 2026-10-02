@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/app-manifest.schema.json",
+  "title": "ORYVAEL Application Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "publisher", "capabilities", "network", "background"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "version": {"type": "string", "minLength": 1},
+    "publisher": {"type": "string", "minLength": 1},
+    "profiles": {
+      "type": "array",
+      "items": {"enum": ["desktop", "mobile"]},
+      "uniqueItems": true
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource", "actions"],
+        "properties": {
+          "resource": {"type": "string"},
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string"},
+            "uniqueItems": true
+          },
+          "scope": {"type": ["string", "null"]},
+          "user_presence": {"type": "boolean", "default": false}
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default"],
+      "properties": {
+        "default": {"enum": ["allow", "deny"]},
+        "allowed_domains": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "background": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed"],
+      "properties": {
+        "allowed": {"type": "boolean"},
+        "budget_ms_per_hour": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

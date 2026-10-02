@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/capability.schema.json",
+  "title": "ORYVAEL Principal Capability Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["principal", "kind", "grants"],
+  "properties": {
+    "principal": {"type": "string", "minLength": 1},
+    "kind": {
+      "enum": ["human", "ai_agent", "service", "application", "recovery"]
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["effect", "resource", "actions"],
+        "properties": {
+          "effect": {"enum": ["allow", "deny"]},
+          "resource": {"type": "string", "minLength": 1},
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "scope": {"type": ["string", "null"]},
+          "expires_at": {"type": ["string", "null"], "format": "date-time"},
+          "delegable": {"type": "boolean", "default": false}
+        }
+      }
+    }
+  }
+}

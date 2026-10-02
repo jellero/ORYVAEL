@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/change-plan.schema.json",
+  "title": "ORYVAEL Change Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "intent", "class", "producer", "components",
+    "requested_capabilities", "verification", "rollback"
+  ],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "intent": {"type": "string", "minLength": 1},
+    "class": {"enum": ["C0", "C1", "C2", "C3", "C4"]},
+    "producer": {"type": "string", "minLength": 1},
+    "components": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "paths": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "requested_capabilities": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "dependencies_added": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true,
+      "default": []
+    },
+    "verification": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "max_rollout_ring": {
+      "enum": ["none", "simulator", "developer", "canary", "fleet"]
+    },
+    "rollback": {"type": "string", "minLength": 1}
+  }
+}
