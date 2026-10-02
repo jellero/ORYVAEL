@@ -2,6 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use oryvael_arch::Architecture;
+use oryvael_evidence::extract_from_jsonl;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_proof::build_from_files;
 use oryvael_protocol::{Operation, Principal};
@@ -61,6 +62,12 @@ enum Command {
         registry: String,
         #[arg(long)]
         request: String,
+    },
+    EvidenceExtract {
+        #[arg(long)]
+        audit: String,
+        #[arg(long)]
+        operation_id: String,
     },
 }
 
@@ -147,6 +154,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         } => {
             let result = create_workspace_from_files(principal, registry, request)?;
             println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+        Command::EvidenceExtract {
+            audit,
+            operation_id,
+        } => {
+            let evidence = extract_from_jsonl(audit, &operation_id)?;
+            println!("{}", serde_json::to_string_pretty(&evidence)?);
         }
     }
 
