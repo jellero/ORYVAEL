@@ -119,9 +119,8 @@ Phase 0 is implemented and the Phase 1 Local Trusted Supervisor is running as an
 
 ## Immediate milestones
 
-1. Build the Phase 2 Tool Broker for Git, compiler, tests and fuzzing.
-2. Bind every AI change to an immutable change plan.
-3. Generate proof packages from independent verifier results.
+1. Expand the Phase 2 Tool Broker from its initial capability-bound implementation to Git, Rust compiler, tests and fuzzing.
+2. Generate proof packages from independent verifier results.
 4. Add reproducible build workers and SBOM generation.
 5. Add persistent supervisor/audit services and external audit checkpoints.
 6. Integrate metrics, logs and traces.
