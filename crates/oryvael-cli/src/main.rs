@@ -7,6 +7,7 @@ use oryvael_proof::build_from_files;
 use oryvael_protocol::{Operation, Principal};
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
+use oryvael_workspace::create_from_files as create_workspace_from_files;
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
@@ -52,6 +53,14 @@ enum Command {
         plan: String,
         #[arg(long)]
         evidence: String,
+    },
+    WorkspaceCreate {
+        #[arg(long)]
+        principal: String,
+        #[arg(long)]
+        registry: String,
+        #[arg(long)]
+        request: String,
     },
 }
 
@@ -130,6 +139,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             if !package.eligible {
                 process::exit(4);
             }
+        }
+        Command::WorkspaceCreate {
+            principal,
+            registry,
+            request,
+        } => {
+            let result = create_workspace_from_files(principal, registry, request)?;
+            println!("{}", serde_json::to_string_pretty(&result)?);
         }
     }
 
