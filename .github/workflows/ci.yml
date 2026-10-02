@@ -93,7 +93,7 @@ jobs:
           ]
           assert len(serde) == 1
           assert serde[0]["version"] == "1.0.229"
-          assert serde[0]["checksum"]
+          assert "crates.io-index" in serde[0]["source"]
           assert all(
               not component["id"].startswith("workspace:/")
               for component in components
