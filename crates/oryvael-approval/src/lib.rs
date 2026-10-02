@@ -266,8 +266,8 @@ fn load_signing_key(path: impl AsRef<Path>) -> Result<SigningKey, ApprovalError>
 }
 
 fn decode_fixed<const N: usize>(encoded: &str) -> Result<[u8; N], ApprovalError> {
-    let decoded =
-        hex::decode(encoded.trim()).map_err(|error| ApprovalError::InvalidHex(error.to_string()))?;
+    let decoded = hex::decode(encoded.trim())
+        .map_err(|error| ApprovalError::InvalidHex(error.to_string()))?;
     decoded
         .try_into()
         .map_err(|_| ApprovalError::InvalidHex(format!("expected {N} bytes")))
