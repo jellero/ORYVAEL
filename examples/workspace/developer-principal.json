@@ -1,0 +1,30 @@
+{
+  "principal": "developer-ai/workspace-demo",
+  "kind": "ai_agent",
+  "grants": [
+    {
+      "effect": "allow",
+      "resource": "repository",
+      "actions": ["read"],
+      "scope": "oryvael-demo",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "workspace",
+      "actions": ["provision"],
+      "scope": "/tmp/oryvael-worktrees/**",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "git_branch",
+      "actions": ["create"],
+      "scope": "oryvael/**",
+      "expires_at": null,
+      "delegable": false
+    }
+  ]
+}
