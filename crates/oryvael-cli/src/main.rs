@@ -5,6 +5,7 @@ use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
+use oryvael_release::check_from_files as check_release_from_files;
 use oryvael_protocol::{Operation, Principal};
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
@@ -74,6 +75,18 @@ enum Command {
         audit: String,
         #[arg(long)]
         operation_id: String,
+    },
+    ReleaseCheck {
+        #[arg(long)]
+        plan: String,
+        #[arg(long)]
+        input: String,
+        #[arg(long)]
+        artifact_name: String,
+        #[arg(long)]
+        artifact: String,
+        #[arg(long)]
+        ring: String,
     },
 }
 
@@ -174,6 +187,20 @@ fn main() -> Result<(), Box<dyn Error>> {
         } => {
             let evidence = extract_from_jsonl(audit, &operation_id)?;
             println!("{}", serde_json::to_string_pretty(&evidence)?);
+        }
+        Command::ReleaseCheck {
+            plan,
+            input,
+            artifact_name,
+            artifact,
+            ring,
+        } => {
+            let decision =
+                check_release_from_files(plan, input, &artifact_name, artifact, &ring)?;
+            println!("{}", serde_json::to_string_pretty(&decision)?);
+            if !decision.eligible {
+                process::exit(5);
+            }
         }
     }
 
