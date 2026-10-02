@@ -9,6 +9,7 @@ members = [
   "crates/oryvael-tool-broker",
   "crates/oryvael-proof",
   "crates/oryvael-workspace",
+  "crates/oryvael-evidence",
   "crates/oryvael-cli",
 ]
 
