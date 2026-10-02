@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/proof-input.schema.json",
+  "title": "ORYVAEL Proof Input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source", "verifiers", "artifacts", "human_approvals"],
+  "properties": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "minLength": 1},
+        "tree": {"type": ["string", "null"]}
+      }
+    },
+    "verifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "principal", "status", "evidence_hash", "operation_id"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "principal": {"type": "string", "minLength": 1},
+          "status": {"enum": ["pass", "fail", "skipped"]},
+          "evidence_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "operation_id": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "sha256"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+        }
+      }
+    },
+    "human_approvals": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}
