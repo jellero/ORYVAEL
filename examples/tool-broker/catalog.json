@@ -15,6 +15,20 @@
             "cpu_seconds": 5,
             "file_size_bytes": 8388608
           }
+        },
+        "source-policy-check": {
+          "argv": [
+            "-c",
+            "from pathlib import Path; s=Path('/workspace/src/demo.py').read_text(); banned=['eval(', 'exec(', 'subprocess', 'socket', 'os.system']; raise SystemExit(1 if any(token in s for token in banned) else 0)"
+          ],
+          "network": "deny",
+          "read_only_paths": [],
+          "timeout_seconds": 10,
+          "limits": {
+            "memory_bytes": 536870912,
+            "cpu_seconds": 5,
+            "file_size_bytes": 8388608
+          }
         }
       }
     },

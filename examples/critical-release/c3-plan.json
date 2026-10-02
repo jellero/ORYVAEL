@@ -1,0 +1,13 @@
+{
+  "id": "CHG-CRITICAL-APPROVAL-001",
+  "intent": "Exercise C3 release authorization with independent test and security evidence",
+  "class": "C3",
+  "producer": "developer-ai/tool-demo",
+  "components": ["critical-approval-demo"],
+  "paths": ["src/demo.py"],
+  "requested_capabilities": [],
+  "dependencies_added": [],
+  "verification": ["python.syntax-check", "python.source-policy-check"],
+  "max_rollout_ring": "canary",
+  "rollback": "Discard the candidate artifact and isolated workspace"
+}

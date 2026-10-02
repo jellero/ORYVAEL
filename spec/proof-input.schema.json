@@ -25,6 +25,10 @@
         "properties": {
           "name": {"type": "string", "minLength": 1},
           "principal": {"type": "string", "minLength": 1},
+          "role": {
+            "type": ["string", "null"],
+            "enum": ["test", "security", "reviewer", null]
+          },
           "status": {"enum": ["pass", "fail", "skipped"]},
           "evidence_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
           "operation_id": {"type": "string", "minLength": 1}

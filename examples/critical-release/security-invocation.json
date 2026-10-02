@@ -1,0 +1,11 @@
+{
+  "principal": "security-ai/critical-demo",
+  "role": "security",
+  "change_id": "CHG-CRITICAL-APPROVAL-001",
+  "change_plan": "examples/critical-release/c3-plan.json",
+  "workspace": "/tmp/oryvael-tool-demo-workspace",
+  "tool": "python",
+  "action": "source-policy-check",
+  "audit_log": "/tmp/oryvael-c3-security-control/audit.jsonl",
+  "artifact_store": "/tmp/oryvael-c3-security-control/artifacts"
+}

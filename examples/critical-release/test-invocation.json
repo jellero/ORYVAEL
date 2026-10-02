@@ -1,0 +1,11 @@
+{
+  "principal": "test-ai/tool-demo",
+  "role": "test",
+  "change_id": "CHG-CRITICAL-APPROVAL-001",
+  "change_plan": "examples/critical-release/c3-plan.json",
+  "workspace": "/tmp/oryvael-tool-demo-workspace",
+  "tool": "python",
+  "action": "syntax-check",
+  "audit_log": "/tmp/oryvael-c3-test-control/audit.jsonl",
+  "artifact_store": "/tmp/oryvael-c3-test-control/artifacts"
+}
