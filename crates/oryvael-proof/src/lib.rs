@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use oryvael_build::{BuildManifestError, build_from_files as build_manifest_from_files};
 use oryvael_evidence::{EvidenceError, EvidenceStatus, VerifiedEvidence, extract_from_jsonl};
 use oryvael_protocol::{ChangeClass, ChangePlan};
 use serde::{Deserialize, Serialize};
@@ -67,7 +68,16 @@ pub struct AuditedProofInput {
     #[serde(default)]
     pub artifacts: Vec<ArtifactEvidence>,
     #[serde(default)]
+    pub build_manifest_input: Option<PathBuf>,
+    #[serde(default)]
     pub human_approvals: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BuildBinding {
+    pub manifest_sha256: String,
+    pub sbom_sha256: String,
+    pub cargo_lock_sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -79,6 +89,8 @@ pub struct ProofPackage {
     pub source: SourceRef,
     pub verifiers: Vec<VerifierEvidence>,
     pub artifacts: Vec<ArtifactEvidence>,
+    #[serde(default)]
+    pub build: Option<BuildBinding>,
     pub eligible: bool,
     pub eligibility_reasons: Vec<String>,
     pub human_approvals: Vec<String>,
@@ -92,6 +104,8 @@ pub enum ProofError {
     Json(#[from] serde_json::Error),
     #[error("evidence verification error: {0}")]
     Evidence(#[from] EvidenceError),
+    #[error("build provenance error: {0}")]
+    Build(#[from] BuildManifestError),
 }
 
 pub fn build_from_files(
@@ -108,6 +122,7 @@ pub fn build_from_files(
         Some(plan_hash),
         false,
         Vec::new(),
+        None,
     ))
 }
 
@@ -115,6 +130,8 @@ pub fn build_audited_from_files(
     plan_path: impl AsRef<Path>,
     input_path: impl AsRef<Path>,
 ) -> Result<ProofPackage, ProofError> {
+    let plan_path = plan_path.as_ref();
+    let input_path = input_path.as_ref();
     let plan_content = fs::read_to_string(plan_path)?;
     let plan: ChangePlan = serde_json::from_str(&plan_content)?;
     let plan_hash = sha256_hex(plan_content.as_bytes());
@@ -144,6 +161,55 @@ pub fn build_audited_from_files(
         }
     }
 
+    let build = match input.build_manifest_input.as_ref() {
+        Some(build_input) => {
+            let manifest = build_manifest_from_files(plan_path, build_input)?;
+
+            if manifest.source.repository != input.source.repository
+                || manifest.source.commit != input.source.commit
+                || manifest.source.tree != input.source.tree
+            {
+                audited_reasons.push(
+                    "build manifest source identity does not match proof source".into(),
+                );
+            }
+
+            let declared_artifacts = input
+                .artifacts
+                .iter()
+                .map(|artifact| (artifact.name.as_str(), artifact.sha256.as_str()))
+                .collect::<BTreeSet<_>>();
+            let built_artifacts = manifest
+                .artifacts
+                .iter()
+                .map(|artifact| (artifact.name.as_str(), artifact.sha256.as_str()))
+                .collect::<BTreeSet<_>>();
+
+            if declared_artifacts != built_artifacts {
+                audited_reasons.push(
+                    "proof artifact set does not match deterministic build manifest".into(),
+                );
+            }
+
+            Some(BuildBinding {
+                manifest_sha256: manifest.manifest_sha256,
+                sbom_sha256: manifest.sbom.sha256,
+                cargo_lock_sha256: manifest.cargo_lock_sha256,
+            })
+        }
+        None => {
+            if matches!(
+                plan.change_class,
+                ChangeClass::C2 | ChangeClass::C3 | ChangeClass::C4
+            ) {
+                audited_reasons.push(
+                    "release-grade C2/C3/C4 proof requires deterministic build provenance".into(),
+                );
+            }
+            None
+        }
+    };
+
     let declared = ProofInput {
         source: input.source,
         verifiers: verified.iter().map(map_verified_evidence).collect(),
@@ -157,11 +223,12 @@ pub fn build_audited_from_files(
         Some(plan_hash),
         true,
         audited_reasons,
+        build,
     ))
 }
 
 pub fn build(plan: &ChangePlan, input: ProofInput) -> ProofPackage {
-    build_internal(plan, input, None, false, Vec::new())
+    build_internal(plan, input, None, false, Vec::new(), None)
 }
 
 fn build_internal(
@@ -170,6 +237,7 @@ fn build_internal(
     change_plan_sha256: Option<String>,
     evidence_verified: bool,
     mut reasons: Vec<String>,
+    build: Option<BuildBinding>,
 ) -> ProofPackage {
     reasons.extend(eligibility_reasons(plan, &input));
     ProofPackage {
@@ -180,6 +248,7 @@ fn build_internal(
         source: input.source,
         verifiers: input.verifiers,
         artifacts: input.artifacts,
+        build,
         eligible: reasons.is_empty(),
         eligibility_reasons: reasons,
         human_approvals: input.human_approvals,
