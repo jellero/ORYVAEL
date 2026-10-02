@@ -54,9 +54,17 @@ jobs:
       - name: Run real confinement demo
         run: |
           rm -rf /tmp/oryvael-demo-workspace /tmp/oryvael-demo-control
+          set +e
           cargo run -p oryvael-cli -- supervise \
             --principal examples/supervisor/developer-principal.json \
             --job examples/supervisor/job.json
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "--- sandbox stderr ---"
+            cat /tmp/oryvael-demo-workspace/.oryvael/runtime/*.stderr || true
+            exit "$status"
+          fi
 
       - name: Verify filesystem confinement
         run: |
