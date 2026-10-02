@@ -1,0 +1,13 @@
+{
+  "id": "CHG-TOOL-DEMO-001",
+  "intent": "Verify the first ORYVAEL brokered development tool",
+  "class": "C1",
+  "producer": "developer-ai/tool-demo",
+  "components": ["tool-broker-demo"],
+  "paths": ["src/demo.py"],
+  "requested_capabilities": ["tool:python.syntax-check"],
+  "dependencies_added": [],
+  "verification": ["python.syntax-check"],
+  "max_rollout_ring": "none",
+  "rollback": "Delete the isolated demo workspace"
+}
