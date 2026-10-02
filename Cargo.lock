@@ -317,6 +317,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oryvael-build"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "oryvael-protocol",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "oryvael-cli"
 version = "0.1.0"
 dependencies = [
@@ -324,6 +336,7 @@ dependencies = [
  "oryvael-approval",
  "oryvael-arch",
  "oryvael-audit",
+ "oryvael-build",
  "oryvael-evidence",
  "oryvael-policy",
  "oryvael-proof",
