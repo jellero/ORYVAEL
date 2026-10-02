@@ -16,10 +16,12 @@ Developer AI writes only in its workspace. Tool invocations receive operation ID
 Formatting, compile, tests, static/security analysis, architecture checks, dependency analysis and risk-class-specific fuzz/property tests.
 
 ## 5. Proof package
-Results become a hash-addressed evidence bundle with verifier identities.
+Results become a structured evidence bundle with verifier identities, operation IDs, evidence hashes, source identity and artifact hashes.
+
+The reference proof engine rejects malformed hashes, records every failed verifier as a veto reason and requires every verifier named in the change plan to have passing evidence.
 
 ## 6. Eligibility
-Deterministic policy maps change class, evidence, rollout scope and human approvals to eligible/not eligible.
+Eligibility is deterministic. For C2/C3/C4, required passing verification must include evidence from a principal different from the producer. C3/C4 additionally require a human-approval reference. This reference is not yet equivalent to a cryptographically verified human signature; signature verification is a later release-gate hardening step.
 
 ## 7. Artifact
 Build creates content-addressed artifact, SBOM and provenance.
