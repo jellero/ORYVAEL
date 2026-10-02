@@ -19,6 +19,7 @@ oryvael-tool-broker = { path = "../oryvael-tool-broker" }
 oryvael-proof = { path = "../oryvael-proof" }
 oryvael-workspace = { path = "../oryvael-workspace" }
 oryvael-evidence = { path = "../oryvael-evidence" }
+oryvael-release = { path = "../oryvael-release" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
