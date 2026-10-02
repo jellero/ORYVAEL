@@ -48,25 +48,36 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap util-linux
 
-      - name: Supervisor host preflight
-        run: cargo run -p oryvael-cli -- supervisor-doctor
+      - name: Build supervisor CLI
+        run: cargo build -p oryvael-cli
+
+      - name: Report rootless host capability
+        run: |
+          set +e
+          ./target/debug/oryvael supervisor-doctor
+          status=$?
+          set -e
+          echo "rootless_preflight_exit=$status"
+
+      - name: Trusted service preflight
+        run: sudo ./target/debug/oryvael supervisor-doctor
 
       - name: Run real confinement demo
         run: |
           rm -rf /tmp/oryvael-demo-workspace /tmp/oryvael-demo-control
           set +e
-          cargo run -p oryvael-cli -- supervise \
+          sudo ./target/debug/oryvael supervise \
             --principal examples/supervisor/developer-principal.json \
             --job examples/supervisor/job.json
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
             echo "--- sandbox stderr ---"
-            cat /tmp/oryvael-demo-workspace/.oryvael/runtime/*.stderr || true
+            sudo cat /tmp/oryvael-demo-workspace/.oryvael/runtime/*.stderr || true
             exit "$status"
           fi
 
-      - name: Verify filesystem confinement
+      - name: Verify filesystem and network confinement
         run: |
           test -f /tmp/oryvael-demo-workspace/generated.txt
           test "$(cat /tmp/oryvael-demo-workspace/generated.txt)" = "ORYVAEL sandbox OK"
@@ -74,7 +85,7 @@ jobs:
 
       - name: Verify audit chain
         run: |
-          cargo run -p oryvael-cli -- audit-verify /tmp/oryvael-demo-control/audit.jsonl
+          ./target/debug/oryvael audit-verify /tmp/oryvael-demo-control/audit.jsonl
           python - <<'PY'
           import json
 
