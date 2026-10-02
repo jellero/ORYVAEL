@@ -658,12 +658,16 @@ pub fn build_sandbox_command(
     }
 
     bwrap.extend([
-        "--bind".into(),
-        prepared.workspace.clone().into_os_string(),
+        "--dir".into(),
         SANDBOX_WORKSPACE.into(),
         "--symlink".into(),
         "workspace/.oryvael/runtime/tmp".into(),
         "/tmp".into(),
+        "--remount-ro".into(),
+        "/".into(),
+        "--bind".into(),
+        prepared.workspace.clone().into_os_string(),
+        SANDBOX_WORKSPACE.into(),
         "--chdir".into(),
         SANDBOX_WORKSPACE.into(),
         "--".into(),
