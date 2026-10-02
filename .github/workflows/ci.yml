@@ -34,3 +34,57 @@ jobs:
           for f in spec/*.json; do
             python -m json.tool "$f" >/dev/null
           done
+
+      - name: Validate architecture contract
+        run: cargo run -p oryvael-cli -- arch-check architecture/system.json
+
+  sandbox-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux sandbox prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap util-linux
+
+      - name: Supervisor host preflight
+        run: cargo run -p oryvael-cli -- supervisor-doctor
+
+      - name: Run real confinement demo
+        run: |
+          rm -rf /tmp/oryvael-demo-workspace /tmp/oryvael-demo-control
+          cargo run -p oryvael-cli -- supervise \
+            --principal examples/supervisor/developer-principal.json \
+            --job examples/supervisor/job.json
+
+      - name: Verify filesystem confinement
+        run: |
+          test -f /tmp/oryvael-demo-workspace/generated.txt
+          test "$(cat /tmp/oryvael-demo-workspace/generated.txt)" = "ORYVAEL sandbox OK"
+          test ! -e /oryvael-escape
+
+      - name: Verify audit chain
+        run: |
+          cargo run -p oryvael-cli -- audit-verify /tmp/oryvael-demo-control/audit.jsonl
+          python - <<'PY'
+          import json
+
+          path = "/tmp/oryvael-demo-control/audit.jsonl"
+          with open(path, "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          assert records, "audit journal is empty"
+          events = [record["event"] for record in records]
+          assert all(event.get("operation_id") for event in events)
+
+          actions = {event["action"] for event in events}
+          required = {
+              "supervisor.run.request",
+              "policy.evaluate",
+              "supervisor.sandbox.start",
+              "supervisor.sandbox.exit",
+          }
+          missing = required - actions
+          assert not missing, f"missing audit actions: {sorted(missing)}"
+          PY
