@@ -1,0 +1,11 @@
+{
+  "principal": "test-ai/tool-demo",
+  "role": "test",
+  "change_id": "CHG-AUDITED-PROOF-001",
+  "change_plan": "examples/audited-proof/c2-plan.json",
+  "workspace": "/tmp/oryvael-tool-demo-workspace",
+  "tool": "python",
+  "action": "syntax-check",
+  "audit_log": "/tmp/oryvael-audited-proof-control/audit.jsonl",
+  "artifact_store": "/tmp/oryvael-audited-proof-control/artifacts"
+}
