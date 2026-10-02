@@ -615,7 +615,6 @@ pub fn build_sandbox_command(
         "--unshare-ipc".into(),
         "--unshare-uts".into(),
         "--unshare-cgroup-try".into(),
-        "--disable-userns".into(),
     ];
 
     bwrap.extend([
