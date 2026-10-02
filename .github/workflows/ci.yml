@@ -23,6 +23,14 @@ jobs:
       - name: Check
         run: cargo check --workspace --all-targets
 
+      - name: Export resolved Cargo lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
