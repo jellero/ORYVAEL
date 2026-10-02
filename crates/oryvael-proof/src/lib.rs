@@ -29,6 +29,8 @@ pub enum VerificationStatus {
 pub struct VerifierEvidence {
     pub name: String,
     pub principal: String,
+    #[serde(default)]
+    pub role: Option<String>,
     pub status: VerificationStatus,
     pub evidence_hash: String,
     pub operation_id: String,
@@ -188,6 +190,7 @@ fn map_verified_evidence(evidence: &VerifiedEvidence) -> VerifierEvidence {
     VerifierEvidence {
         name: evidence.name.clone(),
         principal: evidence.principal.clone(),
+        role: Some(evidence.role.clone()),
         status: match evidence.status {
             EvidenceStatus::Pass => VerificationStatus::Pass,
             EvidenceStatus::Fail => VerificationStatus::Fail,
@@ -265,7 +268,7 @@ fn eligibility_reasons(plan: &ChangePlan, input: &ProofInput) -> Vec<String> {
             continue;
         }
 
-        if requires_independent_verifier(&plan.change_class)
+            if requires_independent_verifier(&plan.change_class)
             && !passes
                 .iter()
                 .any(|verifier| verifier.principal != plan.producer)
@@ -274,6 +277,26 @@ fn eligibility_reasons(plan: &ChangePlan, input: &ProofInput) -> Vec<String> {
                 "required verifier {name} is not independent from producer"
             ));
         }
+    }
+
+    if matches!(plan.change_class, ChangeClass::C3 | ChangeClass::C4)
+        && !input.verifiers.iter().any(|verifier| {
+            verifier.status == VerificationStatus::Pass
+                && verifier.principal != plan.producer
+                && verifier.role.as_deref() == Some("security")
+        })
+    {
+        reasons.push("critical change lacks independent security-role evidence".into());
+    }
+
+    if matches!(plan.change_class, ChangeClass::C4)
+        && !input.verifiers.iter().any(|verifier| {
+            verifier.status == VerificationStatus::Pass
+                && verifier.principal != plan.producer
+                && verifier.role.as_deref() == Some("reviewer")
+        })
+    {
+        reasons.push("constitutional change lacks independent reviewer-role evidence".into());
     }
 
     reasons
@@ -318,6 +341,7 @@ mod tests {
                 VerifierEvidence {
                     name: "test".into(),
                     principal: verifier_principal.into(),
+                    role: Some("test".into()),
                     status: VerificationStatus::Pass,
                     evidence_hash: "a".repeat(64),
                     operation_id: "op-test".into(),
@@ -325,6 +349,7 @@ mod tests {
                 VerifierEvidence {
                     name: "security".into(),
                     principal: "security-ai/1".into(),
+                    role: Some("security".into()),
                     status: VerificationStatus::Pass,
                     evidence_hash: "b".repeat(64),
                     operation_id: "op-security".into(),
