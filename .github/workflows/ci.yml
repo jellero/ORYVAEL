@@ -402,6 +402,77 @@ jobs:
           assert len(metadata.get("context.tool_invocation_sha256", "")) == 64
           PY
 
+      - name: Run independent Test AI verifier
+        run: |
+          sudo rm -rf /tmp/oryvael-tool-test-control
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/tool-broker/test-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/tool-broker/test-invocation.json \
+            > /tmp/oryvael-test-tool-result.json
+
+      - name: Derive verifier evidence from audited execution
+        run: |
+          operation_id="$(python - <<'PY'
+          import json
+          with open("/tmp/oryvael-test-tool-result.json", "r", encoding="utf-8") as handle:
+              print(json.load(handle)["operation_id"])
+          PY
+          )"
+
+          sudo ./target/debug/oryvael evidence-extract \
+            --audit /tmp/oryvael-tool-test-control/audit.jsonl \
+            --operation-id "$operation_id" \
+            > /tmp/oryvael-verified-evidence.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-verified-evidence.json", "r", encoding="utf-8") as handle:
+              evidence = json.load(handle)
+
+          assert evidence["change_id"] == "CHG-TOOL-DEMO-001"
+          assert evidence["name"] == "python.syntax-check"
+          assert evidence["principal"] == "test-ai/tool-demo"
+          assert evidence["role"] == "test"
+          assert evidence["status"] == "pass"
+          assert len(evidence["change_plan_sha256"]) == 64
+          assert len(evidence["evidence_hash"]) == 64
+          assert evidence["operation_id"]
+          PY
+
+      - name: Verify tampered audit cannot produce evidence
+        run: |
+          sudo cp /tmp/oryvael-tool-test-control/audit.jsonl /tmp/oryvael-tampered-audit.jsonl
+          sudo python - <<'PY'
+          import json
+
+          path = "/tmp/oryvael-tampered-audit.jsonl"
+          with open(path, "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          records[-1]["event"]["metadata"]["exit_code"] = "99"
+
+          with open(path, "w", encoding="utf-8") as handle:
+              for record in records:
+                  handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+          PY
+
+          operation_id="$(python - <<'PY'
+          import json
+          with open("/tmp/oryvael-test-tool-result.json", "r", encoding="utf-8") as handle:
+              print(json.load(handle)["operation_id"])
+          PY
+          )"
+
+          set +e
+          sudo ./target/debug/oryvael evidence-extract \
+            --audit /tmp/oryvael-tampered-audit.jsonl \
+            --operation-id "$operation_id"
+          status=$?
+          set -e
+          test "$status" -ne 0
+
       - name: Verify catalog and plan cannot replace principal authority
         run: |
           python - <<'PY'
