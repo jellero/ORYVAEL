@@ -71,13 +71,13 @@ Next deliverables:
 - Rust compiler/test/fuzz profiles;
 - Architect, Developer, Test, Security and Reviewer principals;
 - immutable change-plan binding;
-- proof-package generator;
+- deterministic proof-package generator and eligibility engine;
 - protected verifier results;
 - Git branch/worktree broker;
 - compiler/test/fuzz broker;
 - reproducible build workers;
 - dependency/SBOM service;
-- release eligibility engine.
+- signed approval/provenance verification for release eligibility.
 
 Exit:
 - a C1 ORYVAEL component is generated, independently verified and packaged end-to-end without the AI receiving host-admin authority;
