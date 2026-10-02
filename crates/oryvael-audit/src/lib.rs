@@ -68,9 +68,8 @@ impl JsonlAuditJournal {
                     continue;
                 }
 
-                let record: AuditRecord = serde_json::from_str(&line).map_err(|error| {
-                    AuditError::Json(format!("line {}: {error}", index + 1))
-                })?;
+                let record: AuditRecord = serde_json::from_str(&line)
+                    .map_err(|error| AuditError::Json(format!("line {}: {error}", index + 1)))?;
                 records.push(record);
             }
 
