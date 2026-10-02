@@ -76,7 +76,8 @@ Next deliverables:
 - compiler/test/fuzz broker;
 - reproducible build workers;
 - dependency/SBOM service;
-- signed approval/provenance verification for release eligibility.
+- deterministic release gate that rebuilds audited proof, verifies actual artifact hash and rollout ceiling;
+- signed approval/provenance verification for C3/C4 release eligibility.
 
 Exit:
 - a C1 ORYVAEL component is generated, independently verified and packaged end-to-end without the AI receiving host-admin authority;
