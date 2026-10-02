@@ -6,7 +6,7 @@ The Release Gate decides whether an artifact may advance to a rollout ring.
 
 It does not trust a previously serialized proof-package JSON. Instead it receives:
 - the exact change plan;
-- an audited-proof input containing journal/operation references;
+- an audited-proof input containing journal/operation and build-provenance references;
 - an artifact name;
 - the actual artifact file;
 - the requested rollout ring.
@@ -21,6 +21,7 @@ The current reference gate requires:
 - audited proof is eligible;
 - evidence_verified is true;
 - proof is bound to a change-plan SHA-256;
+- required build provenance and reproducibility checks have already passed inside the rebuilt proof;
 - exactly one proof artifact has the requested artifact name;
 - the SHA-256 of the actual artifact file equals the proof artifact hash;
 - requested rollout ring does not exceed the plan maximum.
@@ -35,24 +36,26 @@ The reference ordering is:
 
 A plan capped at canary cannot request fleet.
 
-## C3 and C4
+## C3 and C4 approvals
 
-C3 and C4 releases are currently denied even if the structural proof contains a human approval reference.
+Critical releases remain fail-closed without cryptographically verified human approval.
 
-Reason: a plain string is not an authorization credential.
+The gate creates an approval context bound to:
+- change ID and class;
+- change-plan SHA-256;
+- rebuilt proof SHA-256;
+- artifact name and SHA-256;
+- requested rollout ring.
 
-The gate remains fail-closed until ORYVAEL has signed human-approval objects bound to:
-- human identity;
-- change-plan hash;
-- proof hash;
-- artifact hash;
-- permitted rollout scope.
+Approval signatures are verified against an external trust policy containing authorized signer public keys, permitted change classes and policy-defined thresholds.
+
+A signature created for a different artifact, proof, plan or rollout context does not authorize the release.
 
 ## Artifact integrity
 
 The artifact hash is calculated by the release gate from the file itself.
 
-Changing one byte after proof construction makes the candidate ineligible.
+Changing one byte after proof construction makes the candidate ineligible. For signed C3/C4 releases, the changed artifact also changes the approval context, so the previous approval no longer satisfies the threshold.
 
 ## CLI
 
@@ -63,8 +66,10 @@ Changing one byte after proof construction makes the candidate ineligible.
       --artifact ./system.img \
       --ring canary
 
+For C3/C4, also provide the approval policy and approval bundle.
+
 Exit code 0 means eligible.
 
 Exit code 5 means a deterministic release decision was produced but is ineligible.
 
-Other non-zero codes indicate invalid input or failure to verify required evidence.
+Other non-zero codes indicate invalid input or failure to verify required evidence/provenance.

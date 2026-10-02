@@ -115,17 +115,19 @@ Trusted reference components are written in Rust with unsafe code forbidden unle
 
 ## Current status
 
-Phase 0 is implemented and the Phase 1 Local Trusted Supervisor is running as an alpha reference. CI now executes the real Linux sandbox and verifies workspace confinement, network denial, architecture policy and tamper-evident audit behavior. ORYVAEL is still not a bootable or production-secure OS.
+Phase 0 is implemented, the Phase 1 Local Trusted Supervisor is an alpha reference, and Phase 2 is actively implemented. CI exercises the real Linux sandbox, policy-bound Git worktrees, fixed Python and Rust tool profiles, independently attributed Test/Security verification, audited proof packages, locked build/SBOM provenance, reproducible-build vetoes, deterministic release checks and signed C3 approval flow.
+
+ORYVAEL is still not a bootable or production-secure OS.
 
 ## Immediate milestones
 
-1. Expand the Phase 2 Tool Broker from its initial capability-bound implementation to Git, Rust compiler, tests and fuzzing.
-2. Generate proof packages from independent verifier results.
-4. Add reproducible build workers and SBOM generation.
-5. Add persistent supervisor/audit services and external audit checkpoints.
-6. Integrate metrics, logs and traces.
-7. Build an immutable Desktop developer image.
-8. Validate the same contracts on ARM64 Mobile.
+1. Complete the Phase 2 C1 end-to-end generation/package exit demo.
+2. Sign privileged tool catalogs and provenance/control artifacts from the trusted root policy.
+3. Add a coverage-guided fuzz backend behind the existing broker boundary.
+4. Add persistent supervisor/audit services and external audit checkpoints.
+5. Integrate metrics, logs and traces.
+6. Build an immutable Desktop developer image.
+7. Validate the same contracts on ARM64 Mobile.
 
 ## License
 

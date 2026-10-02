@@ -53,31 +53,34 @@ Hardening carried into Phase 1.x / Phase 2:
 
 ## Phase 2 — AI Development Factory
 
-Next target.
-
-Status: implementation in progress; the first capability-bound Tool Broker is present.
+Status: implementation in progress; the reference development-factory path is operational.
 
 Delivered foundation:
-- named tool/action catalog; no arbitrary command surface;
-- change-plan hash binding;
-- developer action must be explicitly requested by the plan;
+- named tool/action catalog with no arbitrary command surface;
+- immutable change-plan hash binding for brokered execution and verifier evidence;
+- developer actions must be explicitly requested by the plan;
 - Test/Security/Reviewer roles must differ from the producer;
-- supervisor-enforced `tool.execute` capability;
+- supervisor-enforced tool.execute capability;
 - tool/catalog/invocation/principal hashes recorded in audit context;
-- fixed argv, network policy, timeout and resource limits per catalog action.
+- fixed argv, network policy, timeout and resource limits per catalog action;
+- registry-controlled Git worktree/branch provisioning;
+- Rust compiler and test profiles using an explicit read-only toolchain mount;
+- deterministic Rust fuzz-smoke profile with an independently attributed Security AI verifier;
+- protected verifier evidence derived from the tamper-evident audit chain;
+- deterministic proof-package generator and eligibility engine;
+- locked Cargo dependency graph capture and deterministic SBOM/build manifest;
+- independent reproducible-build comparison with artifact mismatch veto;
+- build/SBOM provenance bound into audited C2+ proof packages;
+- deterministic release gate that rebuilds audited proof, hashes the actual artifact and enforces rollout ceilings;
+- cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- brokered Git worktree/branch operations with registry-controlled paths;
-- Rust compiler/test/fuzz profiles;
-- Architect, Developer, Test, Security and Reviewer principals;
-- immutable change-plan binding;
-- deterministic proof-package generator and eligibility engine;
-- protected verifier results;
-- compiler/test/fuzz broker;
-- reproducible build workers;
-- dependency/SBOM service;
-- deterministic release gate that rebuilds audited proof, verifies actual artifact hash and rollout ceiling;
-- signed approval/provenance verification for C3/C4 release eligibility.
+- sign tool catalogs and other privileged control artifacts from a trusted provenance/root policy;
+- replace the bounded fuzz-smoke profile with a coverage-guided fuzz backend while preserving broker isolation;
+- complete concrete Architect and Reviewer workflows around the existing role enforcement;
+- persistent supervisor/audit services with external checkpoints;
+- central metrics, logs and traces;
+- end-to-end C1 generation demo starting from intent and finishing at a packaged artifact without host-admin authority.
 
 Exit:
 - a C1 ORYVAEL component is generated, independently verified and packaged end-to-end without the AI receiving host-admin authority;
