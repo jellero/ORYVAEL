@@ -666,6 +666,263 @@ jobs:
           assert any("exceeds plan maximum" in reason for reason in decision["reasons"])
           PY
 
+      - name: Run independent C3 test and security verifiers
+        run: |
+          sudo rm -rf \
+            /tmp/oryvael-c3-test-control \
+            /tmp/oryvael-c3-security-control \
+            /tmp/oryvael-c3-release
+
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/tool-broker/test-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/critical-release/test-invocation.json \
+            > /tmp/oryvael-c3-test-run.json
+
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/critical-release/security-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/critical-release/security-invocation.json \
+            > /tmp/oryvael-c3-security-run.json
+
+      - name: Build technically eligible audited C3 proof
+        run: |
+          printf 'ORYVAEL critical release artifact\n' > /tmp/oryvael-c3.img
+
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          with open("/tmp/oryvael-c3-test-run.json", "r", encoding="utf-8") as handle:
+              test_operation = json.load(handle)["operation_id"]
+          with open("/tmp/oryvael-c3-security-run.json", "r", encoding="utf-8") as handle:
+              security_operation = json.load(handle)["operation_id"]
+
+          artifact_hash = hashlib.sha256(Path("/tmp/oryvael-c3.img").read_bytes()).hexdigest()
+
+          payload = {
+              "source": {
+                  "repository": "jellero/ORYVAEL",
+                  "commit": "critical-approval-demo-source",
+                  "tree": None,
+              },
+              "verifier_runs": [
+                  {
+                      "audit_log": "/tmp/oryvael-c3-test-control/audit.jsonl",
+                      "operation_id": test_operation,
+                  },
+                  {
+                      "audit_log": "/tmp/oryvael-c3-security-control/audit.jsonl",
+                      "operation_id": security_operation,
+                  },
+              ],
+              "artifacts": [
+                  {
+                      "name": "oryvael-c3.img",
+                      "sha256": artifact_hash,
+                  }
+              ],
+              "human_approvals": [],
+          }
+
+          with open("/tmp/oryvael-c3-proof-input.json", "w", encoding="utf-8") as handle:
+              json.dump(payload, handle)
+          PY
+
+          sudo ./target/debug/oryvael proof-build-audited \
+            --plan examples/critical-release/c3-plan.json \
+            --input /tmp/oryvael-c3-proof-input.json \
+            > /tmp/oryvael-c3-proof.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-proof.json", "r", encoding="utf-8") as handle:
+              proof = json.load(handle)
+
+          assert proof["eligible"] is True
+          assert proof["change_class"] == "C3"
+          assert proof["evidence_verified"] is True
+          roles = {item.get("role") for item in proof["verifiers"]}
+          assert "test" in roles
+          assert "security" in roles
+          PY
+
+      - name: Verify unsigned C3 release is vetoed
+        run: |
+          set +e
+          sudo ./target/debug/oryvael release-check \
+            --plan examples/critical-release/c3-plan.json \
+            --input /tmp/oryvael-c3-proof-input.json \
+            --artifact-name oryvael-c3.img \
+            --artifact /tmp/oryvael-c3.img \
+            --ring canary \
+            > /tmp/oryvael-c3-unsigned-release.json
+          status=$?
+          set -e
+          test "$status" -eq 5
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-unsigned-release.json", "r", encoding="utf-8") as handle:
+              decision = json.load(handle)
+
+          assert decision["eligible"] is False
+          assert decision["approval_required"] is True
+          assert any(
+              "cryptographically verified human approval" in reason
+              for reason in decision["reasons"]
+          )
+          PY
+
+      - name: Create exact C3 release approval context
+        run: |
+          sudo ./target/debug/oryvael release-context \
+            --plan examples/critical-release/c3-plan.json \
+            --input /tmp/oryvael-c3-proof-input.json \
+            --artifact-name oryvael-c3.img \
+            --artifact /tmp/oryvael-c3.img \
+            --ring canary \
+            > /tmp/oryvael-c3-context.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-context.json", "r", encoding="utf-8") as handle:
+              context = json.load(handle)
+
+          assert context["change_id"] == "CHG-CRITICAL-APPROVAL-001"
+          assert context["change_class"] == "C3"
+          assert context["rollout_ring"] == "canary"
+          assert len(context["change_plan_sha256"]) == 64
+          assert len(context["proof_sha256"]) == 64
+          assert len(context["artifact_sha256"]) == 64
+          PY
+
+      - name: Sign C3 release with ephemeral human root
+        run: |
+          openssl rand -hex 32 > /tmp/oryvael-human-ci.key
+          public_key="$(
+            ./target/debug/oryvael approval-public-key \
+              --private-key /tmp/oryvael-human-ci.key
+          )"
+
+          python - "$public_key" <<'PY'
+          import json
+          import sys
+
+          public_key = sys.argv[1].strip()
+          policy = {
+              "version": 1,
+              "thresholds": {"c3": 1, "c4": 2},
+              "signers": [
+                  {
+                      "id": "human/ci",
+                      "public_key_hex": public_key,
+                      "allowed_classes": ["C3"],
+                  }
+              ],
+          }
+
+          with open("/tmp/oryvael-approval-policy.json", "w", encoding="utf-8") as handle:
+              json.dump(policy, handle)
+          PY
+
+          ./target/debug/oryvael approval-sign \
+            --private-key /tmp/oryvael-human-ci.key \
+            --signer-id human/ci \
+            --context /tmp/oryvael-c3-context.json \
+            > /tmp/oryvael-c3-approval.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-approval.json", "r", encoding="utf-8") as handle:
+              approval = json.load(handle)
+
+          with open("/tmp/oryvael-c3-approval-bundle.json", "w", encoding="utf-8") as handle:
+              json.dump({"approvals": [approval]}, handle)
+          PY
+
+          ./target/debug/oryvael approval-verify \
+            --policy /tmp/oryvael-approval-policy.json \
+            --bundle /tmp/oryvael-c3-approval-bundle.json \
+            --context /tmp/oryvael-c3-context.json \
+            > /tmp/oryvael-c3-approval-verification.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-approval-verification.json", "r", encoding="utf-8") as handle:
+              result = json.load(handle)
+
+          assert result["eligible"] is True
+          assert result["required"] == 1
+          assert result["valid_signers"] == ["human/ci"]
+          PY
+
+      - name: Approve exact C3 artifact for canary release
+        run: |
+          sudo ./target/debug/oryvael release-check \
+            --plan examples/critical-release/c3-plan.json \
+            --input /tmp/oryvael-c3-proof-input.json \
+            --artifact-name oryvael-c3.img \
+            --artifact /tmp/oryvael-c3.img \
+            --ring canary \
+            --approval-policy /tmp/oryvael-approval-policy.json \
+            --approval-bundle /tmp/oryvael-c3-approval-bundle.json \
+            > /tmp/oryvael-c3-release.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-release.json", "r", encoding="utf-8") as handle:
+              decision = json.load(handle)
+
+          assert decision["eligible"] is True
+          assert decision["approval_required"] is True
+          assert decision["approval_threshold"] == 1
+          assert decision["valid_approval_signers"] == ["human/ci"]
+          assert decision["approval_warnings"] == []
+          assert decision["reasons"] == []
+          PY
+
+      - name: Verify C3 signature is artifact-bound
+        run: |
+          cp /tmp/oryvael-c3.img /tmp/oryvael-c3-mutated.img
+          printf 'mutation\n' >> /tmp/oryvael-c3-mutated.img
+
+          set +e
+          sudo ./target/debug/oryvael release-check \
+            --plan examples/critical-release/c3-plan.json \
+            --input /tmp/oryvael-c3-proof-input.json \
+            --artifact-name oryvael-c3.img \
+            --artifact /tmp/oryvael-c3-mutated.img \
+            --ring canary \
+            --approval-policy /tmp/oryvael-approval-policy.json \
+            --approval-bundle /tmp/oryvael-c3-approval-bundle.json \
+            > /tmp/oryvael-c3-mutated-release.json
+          status=$?
+          set -e
+          test "$status" -eq 5
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-c3-mutated-release.json", "r", encoding="utf-8") as handle:
+              decision = json.load(handle)
+
+          assert decision["eligible"] is False
+          assert any("artifact hash mismatch" in reason for reason in decision["reasons"])
+          assert any("threshold not met" in reason for reason in decision["reasons"])
+          assert any(
+              "different release context" in warning
+              for warning in decision["approval_warnings"]
+          )
+          PY
+
       - name: Verify catalog and plan cannot replace principal authority
         run: |
           python - <<'PY'
