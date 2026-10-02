@@ -1,0 +1,36 @@
+{
+  "change_id": "CHG-BUILD-MANIFEST-001",
+  "builder_principal": "build-service/reference",
+  "source": {
+    "repository": "jellero/ORYVAEL",
+    "commit": "demo-source-commit",
+    "tree": null
+  },
+  "toolchain": {
+    "name": "rust",
+    "version": "1.85.0",
+    "sha256": null
+  },
+  "target": "x86_64-unknown-linux-gnu",
+  "profile": "release",
+  "artifacts": [
+    {
+      "name": "oryvael-demo.img",
+      "path": "/tmp/oryvael-demo-build/oryvael-demo.img"
+    }
+  ],
+  "dependencies": [
+    {
+      "name": "serde",
+      "version": "1",
+      "source": "registry:crates.io",
+      "checksum": null
+    },
+    {
+      "name": "sha2",
+      "version": "0.10",
+      "source": "registry:crates.io",
+      "checksum": null
+    }
+  ]
+}

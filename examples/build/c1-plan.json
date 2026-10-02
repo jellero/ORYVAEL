@@ -1,0 +1,13 @@
+{
+  "id": "CHG-BUILD-MANIFEST-001",
+  "intent": "Generate deterministic artifact and dependency manifest",
+  "class": "C1",
+  "producer": "developer-ai/build-demo",
+  "components": ["oryvael-build"],
+  "paths": ["crates/oryvael-build/**"],
+  "requested_capabilities": ["build:manifest"],
+  "dependencies_added": [],
+  "verification": ["build-manifest.validate"],
+  "max_rollout_ring": "none",
+  "rollback": "discard generated manifest"
+}

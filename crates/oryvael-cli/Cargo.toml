@@ -21,6 +21,7 @@ oryvael-workspace = { path = "../oryvael-workspace" }
 oryvael-evidence = { path = "../oryvael-evidence" }
 oryvael-approval = { path = "../oryvael-approval" }
 oryvael-release = { path = "../oryvael-release" }
+oryvael-build = { path = "../oryvael-build" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true

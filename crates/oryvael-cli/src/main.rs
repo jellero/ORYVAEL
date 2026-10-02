@@ -3,6 +3,7 @@
 use clap::{Parser, Subcommand};
 use oryvael_approval::{public_key_from_private_file, sign_from_files, verify_from_files};
 use oryvael_arch::Architecture;
+use oryvael_build::build_from_files as build_manifest_from_files;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
@@ -111,6 +112,12 @@ enum Command {
         bundle: String,
         #[arg(long)]
         context: String,
+    },
+    BuildManifest {
+        #[arg(long)]
+        plan: String,
+        #[arg(long)]
+        input: String,
     },
     ReleaseCheck {
         #[arg(long)]
@@ -260,6 +267,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             if !verification.eligible {
                 process::exit(6);
             }
+        }
+        Command::BuildManifest { plan, input } => {
+            let manifest = build_manifest_from_files(plan, input)?;
+            println!("{}", serde_json::to_string_pretty(&manifest)?);
         }
         Command::ReleaseCheck {
             plan,

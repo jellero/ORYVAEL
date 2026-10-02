@@ -12,6 +12,7 @@ members = [
   "crates/oryvael-evidence",
   "crates/oryvael-approval",
   "crates/oryvael-release",
+  "crates/oryvael-build",
   "crates/oryvael-cli",
 ]
 
