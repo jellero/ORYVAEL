@@ -49,6 +49,27 @@ pub struct JsonlAuditJournal {
     file: File,
 }
 
+pub fn load_jsonl(path: impl AsRef<Path>) -> Result<AuditLedger, AuditError> {
+    let file = File::open(path).map_err(|error| AuditError::Io(error.to_string()))?;
+    let reader = BufReader::new(file);
+    let mut records = Vec::new();
+
+    for (index, line) in reader.lines().enumerate() {
+        let line = line.map_err(|error| AuditError::Io(error.to_string()))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        let record: AuditRecord = serde_json::from_str(&line)
+            .map_err(|error| AuditError::Json(format!("line {}: {error}", index + 1)))?;
+        records.push(record);
+    }
+
+    let ledger = AuditLedger::from_records(records);
+    ledger.verify()?;
+    Ok(ledger)
+}
+
 impl JsonlAuditJournal {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, AuditError> {
         let path = path.as_ref();
@@ -58,24 +79,7 @@ impl JsonlAuditJournal {
         }
 
         let ledger = if path.exists() {
-            let file = File::open(path).map_err(|error| AuditError::Io(error.to_string()))?;
-            let reader = BufReader::new(file);
-            let mut records = Vec::new();
-
-            for (index, line) in reader.lines().enumerate() {
-                let line = line.map_err(|error| AuditError::Io(error.to_string()))?;
-                if line.trim().is_empty() {
-                    continue;
-                }
-
-                let record: AuditRecord = serde_json::from_str(&line)
-                    .map_err(|error| AuditError::Json(format!("line {}: {error}", index + 1)))?;
-                records.push(record);
-            }
-
-            let ledger = AuditLedger::from_records(records);
-            ledger.verify()?;
-            ledger
+            load_jsonl(path)?
         } else {
             AuditLedger::new()
         };
