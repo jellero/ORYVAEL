@@ -48,7 +48,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap util-linux
 
-      - name: Build supervisor CLI
+      - name: Build ORYVAEL CLI
         run: cargo build -p oryvael-cli
 
       - name: Report rootless host capability
@@ -65,17 +65,9 @@ jobs:
       - name: Run real confinement demo
         run: |
           rm -rf /tmp/oryvael-demo-workspace /tmp/oryvael-demo-control
-          set +e
           sudo ./target/debug/oryvael supervise \
             --principal examples/supervisor/developer-principal.json \
             --job examples/supervisor/job.json
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]; then
-            echo "--- sandbox stderr ---"
-            sudo cat /tmp/oryvael-demo-workspace/.oryvael/runtime/*.stderr || true
-            exit "$status"
-          fi
 
       - name: Verify filesystem and network confinement
         run: |
@@ -88,32 +80,32 @@ jobs:
           python - <<'PY'
           import json
 
-          source = "examples/supervisor/job.json"
-          target = "/tmp/oryvael-network-denied-job.json"
-          with open(source, "r", encoding="utf-8") as handle:
+          with open("examples/supervisor/job.json", "r", encoding="utf-8") as handle:
               job = json.load(handle)
 
           job["network"] = "host"
           job["audit_log"] = "/tmp/oryvael-network-denied-control/audit.jsonl"
           job["artifact_store"] = "/tmp/oryvael-network-denied-control/artifacts"
 
-          with open(target, "w", encoding="utf-8") as handle:
+          with open("/tmp/oryvael-network-denied-job.json", "w", encoding="utf-8") as handle:
               json.dump(job, handle)
           PY
 
           set +e
-          sudo ./target/debug/oryvael supervise             --principal examples/supervisor/developer-principal.json             --job /tmp/oryvael-network-denied-job.json
+          sudo ./target/debug/oryvael supervise \
+            --principal examples/supervisor/developer-principal.json \
+            --job /tmp/oryvael-network-denied-job.json
           status=$?
           set -e
           test "$status" -ne 0
 
-          ./target/debug/oryvael audit-verify             /tmp/oryvael-network-denied-control/audit.jsonl
+          ./target/debug/oryvael audit-verify \
+            /tmp/oryvael-network-denied-control/audit.jsonl
 
           python - <<'PY'
           import json
 
-          path = "/tmp/oryvael-network-denied-control/audit.jsonl"
-          with open(path, "r", encoding="utf-8") as handle:
+          with open("/tmp/oryvael-network-denied-control/audit.jsonl", "r", encoding="utf-8") as handle:
               records = [json.loads(line) for line in handle if line.strip()]
 
           denied = [
@@ -128,22 +120,24 @@ jobs:
 
       - name: Verify control files cannot be worker-writable
         run: |
-          sudo cp examples/supervisor/job.json             /tmp/oryvael-demo-workspace/self-modifiable-job.json
+          sudo cp examples/supervisor/job.json \
+            /tmp/oryvael-demo-workspace/self-modifiable-job.json
 
           set +e
-          sudo ./target/debug/oryvael supervise             --principal examples/supervisor/developer-principal.json             --job /tmp/oryvael-demo-workspace/self-modifiable-job.json
+          sudo ./target/debug/oryvael supervise \
+            --principal examples/supervisor/developer-principal.json \
+            --job /tmp/oryvael-demo-workspace/self-modifiable-job.json
           status=$?
           set -e
           test "$status" -ne 0
 
-      - name: Verify audit chain
+      - name: Verify supervisor audit chain
         run: |
           ./target/debug/oryvael audit-verify /tmp/oryvael-demo-control/audit.jsonl
           python - <<'PY'
           import json
 
-          path = "/tmp/oryvael-demo-control/audit.jsonl"
-          with open(path, "r", encoding="utf-8") as handle:
+          with open("/tmp/oryvael-demo-control/audit.jsonl", "r", encoding="utf-8") as handle:
               records = [json.loads(line) for line in handle if line.strip()]
 
           assert records, "audit journal is empty"
@@ -159,4 +153,99 @@ jobs:
           }
           missing = required - actions
           assert not missing, f"missing audit actions: {sorted(missing)}"
+          PY
+
+      - name: Prepare brokered development workspace
+        run: |
+          rm -rf /tmp/oryvael-tool-demo-workspace /tmp/oryvael-tool-demo-control
+          mkdir -p /tmp/oryvael-tool-demo-workspace
+          cp -R examples/tool-broker/workspace/. /tmp/oryvael-tool-demo-workspace/
+
+      - name: Run capability-bound tool
+        run: |
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/tool-broker/developer-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/tool-broker/invocation.json
+
+      - name: Verify brokered action and audit binding
+        run: |
+          find /tmp/oryvael-tool-demo-workspace -path '*/__pycache__/*.pyc' -print -quit | grep -q .
+          ./target/debug/oryvael audit-verify /tmp/oryvael-tool-demo-control/audit.jsonl
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-tool-demo-control/audit.jsonl", "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          events = [record["event"] for record in records]
+          tool_allows = [
+              event for event in events
+              if event["action"] == "policy.evaluate"
+              and event["decision"] == "allowed"
+              and event["target"] == "python.syntax-check"
+              and event["metadata"].get("resource") == "tool"
+          ]
+          assert tool_allows, "missing allowed tool.execute decision"
+
+          requests = [event for event in events if event["action"] == "supervisor.run.request"]
+          assert requests, "missing brokered run request"
+          metadata = requests[-1]["metadata"]
+          assert metadata.get("context.broker") == "oryvael-tool-broker"
+          assert metadata.get("context.tool") == "python"
+          assert metadata.get("context.tool_action") == "syntax-check"
+          assert len(metadata.get("context.change_plan_sha256", "")) == 64
+          assert len(metadata.get("context.tool_catalog_sha256", "")) == 64
+          assert len(metadata.get("context.tool_invocation_sha256", "")) == 64
+          PY
+
+      - name: Verify catalog and plan cannot replace principal authority
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("examples/tool-broker/developer-principal.json", "r", encoding="utf-8") as handle:
+              principal = json.load(handle)
+          principal["grants"] = [
+              grant for grant in principal["grants"]
+              if grant["resource"] != "tool"
+          ]
+          with open("/tmp/oryvael-no-tool-principal.json", "w", encoding="utf-8") as handle:
+              json.dump(principal, handle)
+
+          with open("examples/tool-broker/invocation.json", "r", encoding="utf-8") as handle:
+              invocation = json.load(handle)
+          invocation["audit_log"] = "/tmp/oryvael-tool-denied-control/audit.jsonl"
+          invocation["artifact_store"] = "/tmp/oryvael-tool-denied-control/artifacts"
+          with open("/tmp/oryvael-tool-denied-invocation.json", "w", encoding="utf-8") as handle:
+              json.dump(invocation, handle)
+          PY
+
+          set +e
+          sudo ./target/debug/oryvael tool-run \
+            --principal /tmp/oryvael-no-tool-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation /tmp/oryvael-tool-denied-invocation.json
+          status=$?
+          set -e
+          test "$status" -ne 0
+
+          ./target/debug/oryvael audit-verify /tmp/oryvael-tool-denied-control/audit.jsonl
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-tool-denied-control/audit.jsonl", "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          denied = [
+              record["event"]
+              for record in records
+              if record["event"]["action"] == "policy.evaluate"
+              and record["event"]["decision"] == "denied"
+              and record["event"]["target"] == "python.syntax-check"
+              and record["event"]["metadata"].get("resource") == "tool"
+          ]
+          assert denied, "expected supervisor to deny missing tool.execute authority"
           PY
