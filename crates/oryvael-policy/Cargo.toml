@@ -1,0 +1,10 @@
+[package]
+name = "oryvael-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+oryvael-protocol = { path = "../oryvael-protocol" }
+serde.workspace = true

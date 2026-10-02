@@ -1,0 +1,18 @@
+[package]
+name = "oryvael-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "oryvael"
+path = "src/main.rs"
+
+[dependencies]
+oryvael-protocol = { path = "../oryvael-protocol" }
+oryvael-policy = { path = "../oryvael-policy" }
+oryvael-audit = { path = "../oryvael-audit" }
+oryvael-arch = { path = "../oryvael-arch" }
+clap.workspace = true
+serde_json.workspace = true
