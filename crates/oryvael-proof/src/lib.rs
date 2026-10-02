@@ -213,8 +213,7 @@ pub fn build_audited_from_files(
 
                 binding.reproducible = report.reproducible;
                 binding.independent_builder = Some(independent.builder_principal.clone());
-                binding.reproducible_manifest_sha256 =
-                    Some(independent.manifest_sha256.clone());
+                binding.reproducible_manifest_sha256 = Some(independent.manifest_sha256.clone());
             } else if requires_reproducible_build(&plan) {
                 audited_reasons.push(
                     "change plan requires build:reproducible but no independent build input was provided"
