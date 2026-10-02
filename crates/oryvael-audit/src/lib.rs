@@ -84,7 +84,8 @@ impl AuditLedger {
                 return Err(AuditError::PreviousHash { index });
             }
 
-            let expected_hash = compute_hash(record.sequence, &record.previous_hash, &record.event)?;
+            let expected_hash =
+                compute_hash(record.sequence, &record.previous_hash, &record.event)?;
             if record.hash != expected_hash {
                 return Err(AuditError::Hash { index });
             }
@@ -96,9 +97,13 @@ impl AuditLedger {
     }
 }
 
-fn compute_hash(sequence: u64, previous_hash: &str, event: &AuditEvent) -> Result<String, AuditError> {
-    let payload = serde_json::to_vec(event)
-        .map_err(|error| AuditError::Serialization(error.to_string()))?;
+fn compute_hash(
+    sequence: u64,
+    previous_hash: &str,
+    event: &AuditEvent,
+) -> Result<String, AuditError> {
+    let payload =
+        serde_json::to_vec(event).map_err(|error| AuditError::Serialization(error.to_string()))?;
 
     let mut hasher = Sha256::new();
     hasher.update(sequence.to_be_bytes());
