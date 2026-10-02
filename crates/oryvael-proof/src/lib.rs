@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 
+use oryvael_evidence::{EvidenceError, EvidenceStatus, VerifiedEvidence, extract_from_jsonl};
 use oryvael_protocol::{ChangeClass, ChangePlan};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -50,9 +52,28 @@ pub struct ProofInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditEvidenceRef {
+    pub audit_log: PathBuf,
+    pub operation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AuditedProofInput {
+    pub source: SourceRef,
+    #[serde(default)]
+    pub verifier_runs: Vec<AuditEvidenceRef>,
+    #[serde(default)]
+    pub artifacts: Vec<ArtifactEvidence>,
+    #[serde(default)]
+    pub human_approvals: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProofPackage {
     pub change_id: String,
     pub change_class: ChangeClass,
+    pub change_plan_sha256: Option<String>,
+    pub evidence_verified: bool,
     pub source: SourceRef,
     pub verifiers: Vec<VerifierEvidence>,
     pub artifacts: Vec<ArtifactEvidence>,
@@ -67,22 +88,93 @@ pub enum ProofError {
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("evidence verification error: {0}")]
+    Evidence(#[from] EvidenceError),
 }
 
 pub fn build_from_files(
     plan_path: impl AsRef<Path>,
     evidence_path: impl AsRef<Path>,
 ) -> Result<ProofPackage, ProofError> {
-    let plan: ChangePlan = serde_json::from_str(&fs::read_to_string(plan_path)?)?;
+    let plan_content = fs::read_to_string(plan_path)?;
+    let plan: ChangePlan = serde_json::from_str(&plan_content)?;
     let evidence: ProofInput = serde_json::from_str(&fs::read_to_string(evidence_path)?)?;
-    Ok(build(&plan, evidence))
+    let plan_hash = sha256_hex(plan_content.as_bytes());
+    Ok(build_internal(
+        &plan,
+        evidence,
+        Some(plan_hash),
+        false,
+        Vec::new(),
+    ))
+}
+
+pub fn build_audited_from_files(
+    plan_path: impl AsRef<Path>,
+    input_path: impl AsRef<Path>,
+) -> Result<ProofPackage, ProofError> {
+    let plan_content = fs::read_to_string(plan_path)?;
+    let plan: ChangePlan = serde_json::from_str(&plan_content)?;
+    let plan_hash = sha256_hex(plan_content.as_bytes());
+    let input: AuditedProofInput = serde_json::from_str(&fs::read_to_string(input_path)?)?;
+
+    let mut verified = Vec::with_capacity(input.verifier_runs.len());
+    for reference in &input.verifier_runs {
+        verified.push(extract_from_jsonl(
+            &reference.audit_log,
+            &reference.operation_id,
+        )?);
+    }
+
+    let mut audited_reasons = Vec::new();
+    for evidence in &verified {
+        if evidence.change_id != plan.id {
+            audited_reasons.push(format!(
+                "verifier {} belongs to change {}, expected {}",
+                evidence.name, evidence.change_id, plan.id
+            ));
+        }
+        if evidence.change_plan_sha256 != plan_hash {
+            audited_reasons.push(format!(
+                "verifier {} change-plan hash does not match evaluated plan",
+                evidence.name
+            ));
+        }
+    }
+
+    let declared = ProofInput {
+        source: input.source,
+        verifiers: verified.iter().map(map_verified_evidence).collect(),
+        artifacts: input.artifacts,
+        human_approvals: input.human_approvals,
+    };
+
+    Ok(build_internal(
+        &plan,
+        declared,
+        Some(plan_hash),
+        true,
+        audited_reasons,
+    ))
 }
 
 pub fn build(plan: &ChangePlan, input: ProofInput) -> ProofPackage {
-    let reasons = eligibility_reasons(plan, &input);
+    build_internal(plan, input, None, false, Vec::new())
+}
+
+fn build_internal(
+    plan: &ChangePlan,
+    input: ProofInput,
+    change_plan_sha256: Option<String>,
+    evidence_verified: bool,
+    mut reasons: Vec<String>,
+) -> ProofPackage {
+    reasons.extend(eligibility_reasons(plan, &input));
     ProofPackage {
         change_id: plan.id.clone(),
         change_class: plan.change_class.clone(),
+        change_plan_sha256,
+        evidence_verified,
         source: input.source,
         verifiers: input.verifiers,
         artifacts: input.artifacts,
@@ -90,6 +182,25 @@ pub fn build(plan: &ChangePlan, input: ProofInput) -> ProofPackage {
         eligibility_reasons: reasons,
         human_approvals: input.human_approvals,
     }
+}
+
+fn map_verified_evidence(evidence: &VerifiedEvidence) -> VerifierEvidence {
+    VerifierEvidence {
+        name: evidence.name.clone(),
+        principal: evidence.principal.clone(),
+        status: match evidence.status {
+            EvidenceStatus::Pass => VerificationStatus::Pass,
+            EvidenceStatus::Fail => VerificationStatus::Fail,
+        },
+        evidence_hash: evidence.evidence_hash.clone(),
+        operation_id: evidence.operation_id.clone(),
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
 }
 
 fn eligibility_reasons(plan: &ChangePlan, input: &ProofInput) -> Vec<String> {
