@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_evidence::extract_from_jsonl;
-use oryvael_proof::build_from_files;
+use oryvael_proof::{build_audited_from_files, build_from_files};
 use oryvael_protocol::{Operation, Principal};
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
@@ -54,6 +54,12 @@ enum Command {
         plan: String,
         #[arg(long)]
         evidence: String,
+    },
+    ProofBuildAudited {
+        #[arg(long)]
+        plan: String,
+        #[arg(long)]
+        input: String,
     },
     WorkspaceCreate {
         #[arg(long)]
@@ -142,6 +148,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         Command::ProofBuild { plan, evidence } => {
             let package = build_from_files(plan, evidence)?;
+            println!("{}", serde_json::to_string_pretty(&package)?);
+            if !package.eligible {
+                process::exit(4);
+            }
+        }
+        Command::ProofBuildAudited { plan, input } => {
+            let package = build_audited_from_files(plan, input)?;
             println!("{}", serde_json::to_string_pretty(&package)?);
             if !package.eligible {
                 process::exit(4);
