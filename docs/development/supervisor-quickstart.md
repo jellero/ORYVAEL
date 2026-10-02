@@ -17,6 +17,10 @@ Build ORYVAEL:
 
     cargo build --workspace
 
+Check host prerequisites:
+
+    cargo run -p oryvael-cli -- supervisor-doctor
+
 ## Run the confinement demo
 
 Remove prior demo state if desired:
