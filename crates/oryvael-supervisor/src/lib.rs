@@ -85,6 +85,16 @@ pub struct SandboxCommand {
     pub args: Vec<OsString>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostStatus {
+    pub linux: bool,
+    pub bubblewrap_available: bool,
+    pub prlimit_available: bool,
+    pub user_namespace_hint: Option<bool>,
+    pub ready_for_basic_sandbox: bool,
+    pub ready_for_resource_limits: bool,
+}
+
 #[derive(Debug, Error)]
 pub enum SupervisorError {
     #[error("ORYVAEL supervisor currently supports Linux only")]
@@ -234,6 +244,26 @@ impl ArtifactStore {
             bytes,
             path: target,
         })
+    }
+}
+
+pub fn host_status() -> HostStatus {
+    let linux = cfg!(target_os = "linux");
+    let bubblewrap_available = program_available("bwrap", "--version");
+    let prlimit_available = program_available("prlimit", "--version");
+    let user_namespace_hint = user_namespace_hint();
+    let namespace_allowed = user_namespace_hint.unwrap_or(true);
+
+    HostStatus {
+        linux,
+        bubblewrap_available,
+        prlimit_available,
+        user_namespace_hint,
+        ready_for_basic_sandbox: linux && bubblewrap_available && namespace_allowed,
+        ready_for_resource_limits: linux
+            && bubblewrap_available
+            && prlimit_available
+            && namespace_allowed,
     }
 }
 
@@ -783,6 +813,35 @@ fn now_ns() -> u64 {
         .unwrap_or_default()
         .as_nanos();
     u64::try_from(nanos).unwrap_or(u64::MAX)
+}
+
+fn program_available(program: &str, version_arg: &str) -> bool {
+    Command::new(program)
+        .arg(version_arg)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn user_namespace_hint() -> Option<bool> {
+    let clone_flag = fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value != 0);
+
+    let max_namespaces = fs::read_to_string("/proc/sys/user/max_user_namespaces")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value != 0);
+
+    match (clone_flag, max_namespaces) {
+        (Some(clone), Some(maximum)) => Some(clone && maximum),
+        (Some(clone), None) => Some(clone),
+        (None, Some(maximum)) => Some(maximum),
+        (None, None) => None,
+    }
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
