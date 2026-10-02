@@ -117,7 +117,10 @@ fn layer_dependency_allowed(source: &Layer, target: &Layer) -> bool {
                 Layer::AiControl,
                 Layer::TrustedCore | Layer::SystemService | Layer::AiControl
             )
-            | (Layer::Application, Layer::SystemService | Layer::Application)
+            | (
+                Layer::Application,
+                Layer::SystemService | Layer::Application
+            )
     )
 }
 
