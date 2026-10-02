@@ -90,6 +90,12 @@
         "string",
         "null"
       ]
+    },
+    "reproducible_build_input": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   }
 }
