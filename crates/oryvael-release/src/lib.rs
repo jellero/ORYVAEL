@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+use oryvael_approval::{
+    ApprovalBundle, ApprovalContext, ApprovalError, ApprovalTrustPolicy, ApprovalVerification,
+    verify as verify_approvals,
+};
 use oryvael_proof::{ProofError, ProofPackage, build_audited_from_files};
 use oryvael_protocol::{ChangeClass, ChangePlan};
 use serde::{Deserialize, Serialize};
@@ -29,6 +33,10 @@ pub struct ReleaseGateDecision {
     pub artifact_sha256: String,
     pub proof_sha256: String,
     pub evidence_verified: bool,
+    pub approval_required: bool,
+    pub approval_threshold: u32,
+    pub valid_approval_signers: Vec<String>,
+    pub approval_warnings: Vec<String>,
     pub eligible: bool,
     pub reasons: Vec<String>,
 }
@@ -37,6 +45,8 @@ pub struct ReleaseGateDecision {
 pub enum ReleaseError {
     #[error("proof error: {0}")]
     Proof(#[from] ProofError),
+    #[error("approval error: {0}")]
+    Approval(#[from] ApprovalError),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
@@ -45,6 +55,19 @@ pub enum ReleaseError {
     InvalidRing(String),
     #[error("artifact is not a file: {0}")]
     InvalidArtifact(String),
+    #[error("release context is not technically eligible: {0}")]
+    BaseIneligible(String),
+}
+
+struct PreparedRelease {
+    plan: ChangePlan,
+    proof: ProofPackage,
+    requested_ring: RolloutRing,
+    maximum_ring: RolloutRing,
+    artifact_name: String,
+    artifact_sha256: String,
+    proof_sha256: String,
+    reasons: Vec<String>,
 }
 
 pub fn check_from_files(
@@ -54,10 +77,75 @@ pub fn check_from_files(
     artifact_path: impl AsRef<Path>,
     requested_ring: &str,
 ) -> Result<ReleaseGateDecision, ReleaseError> {
-    let plan_content = fs::read_to_string(plan_path.as_ref())?;
+    let prepared = prepare_release(
+        plan_path.as_ref(),
+        audited_input_path.as_ref(),
+        artifact_name,
+        artifact_path.as_ref(),
+        requested_ring,
+    )?;
+    Ok(finalize(prepared, None))
+}
+
+pub fn check_from_files_with_approvals(
+    plan_path: impl AsRef<Path>,
+    audited_input_path: impl AsRef<Path>,
+    artifact_name: &str,
+    artifact_path: impl AsRef<Path>,
+    requested_ring: &str,
+    approval_policy_path: impl AsRef<Path>,
+    approval_bundle_path: impl AsRef<Path>,
+) -> Result<ReleaseGateDecision, ReleaseError> {
+    let prepared = prepare_release(
+        plan_path.as_ref(),
+        audited_input_path.as_ref(),
+        artifact_name,
+        artifact_path.as_ref(),
+        requested_ring,
+    )?;
+
+    let context = approval_context(&prepared)?;
+    let policy: ApprovalTrustPolicy =
+        serde_json::from_str(&fs::read_to_string(approval_policy_path.as_ref())?)?;
+    let bundle: ApprovalBundle =
+        serde_json::from_str(&fs::read_to_string(approval_bundle_path.as_ref())?)?;
+    let verification = verify_approvals(&policy, &bundle, &context)?;
+
+    Ok(finalize(prepared, Some(verification)))
+}
+
+pub fn approval_context_from_files(
+    plan_path: impl AsRef<Path>,
+    audited_input_path: impl AsRef<Path>,
+    artifact_name: &str,
+    artifact_path: impl AsRef<Path>,
+    requested_ring: &str,
+) -> Result<ApprovalContext, ReleaseError> {
+    let prepared = prepare_release(
+        plan_path.as_ref(),
+        audited_input_path.as_ref(),
+        artifact_name,
+        artifact_path.as_ref(),
+        requested_ring,
+    )?;
+
+    if !prepared.reasons.is_empty() {
+        return Err(ReleaseError::BaseIneligible(prepared.reasons.join("; ")));
+    }
+
+    approval_context(&prepared)
+}
+
+fn prepare_release(
+    plan_path: &Path,
+    audited_input_path: &Path,
+    artifact_name: &str,
+    artifact_path: &Path,
+    requested_ring: &str,
+) -> Result<PreparedRelease, ReleaseError> {
+    let plan_content = fs::read_to_string(plan_path)?;
     let plan: ChangePlan = serde_json::from_str(&plan_content)?;
     let proof = build_audited_from_files(plan_path, audited_input_path)?;
-    let artifact_path = artifact_path.as_ref();
 
     if !artifact_path.is_file() {
         return Err(ReleaseError::InvalidArtifact(
@@ -70,28 +158,38 @@ pub fn check_from_files(
         Some(ring) => parse_ring(ring)?,
         None => RolloutRing::None,
     };
-
-    Ok(check(
+    let artifact_sha256 = hash_file(artifact_path)?;
+    let proof_sha256 =
+        sha256_hex(&serde_json::to_vec(&proof).expect("proof package is serializable"));
+    let reasons = base_reasons(
         &plan,
         &proof,
         artifact_name,
-        artifact_path,
+        &artifact_sha256,
         requested_ring,
         maximum_ring,
-    )?)
+    );
+
+    Ok(PreparedRelease {
+        plan,
+        proof,
+        requested_ring,
+        maximum_ring,
+        artifact_name: artifact_name.into(),
+        artifact_sha256,
+        proof_sha256,
+        reasons,
+    })
 }
 
-fn check(
+fn base_reasons(
     plan: &ChangePlan,
     proof: &ProofPackage,
     artifact_name: &str,
-    artifact_path: &Path,
+    artifact_sha256: &str,
     requested_ring: RolloutRing,
     maximum_ring: RolloutRing,
-) -> Result<ReleaseGateDecision, std::io::Error> {
-    let artifact_sha256 = hash_file(artifact_path)?;
-    let proof_sha256 =
-        sha256_hex(&serde_json::to_vec(proof).expect("proof package is serializable"));
+) -> Vec<String> {
     let mut reasons = Vec::new();
 
     if proof.change_id != plan.id {
@@ -141,24 +239,75 @@ fn check(
         ));
     }
 
-    if matches!(plan.change_class, ChangeClass::C3 | ChangeClass::C4) {
-        reasons.push(
-            "C3/C4 release is disabled until human approvals are cryptographically verified".into(),
-        );
-    }
+    reasons
+}
 
-    Ok(ReleaseGateDecision {
-        change_id: plan.id.clone(),
-        change_class: plan.change_class.clone(),
-        requested_ring,
-        maximum_ring,
-        artifact_name: artifact_name.into(),
-        artifact_sha256,
-        proof_sha256,
-        evidence_verified: proof.evidence_verified,
-        eligible: reasons.is_empty(),
-        reasons,
+fn approval_context(prepared: &PreparedRelease) -> Result<ApprovalContext, ReleaseError> {
+    let change_plan_sha256 = prepared
+        .proof
+        .change_plan_sha256
+        .clone()
+        .ok_or_else(|| ReleaseError::BaseIneligible("missing change-plan hash".into()))?;
+
+    Ok(ApprovalContext {
+        change_id: prepared.plan.id.clone(),
+        change_class: prepared.plan.change_class.clone(),
+        change_plan_sha256,
+        proof_sha256: prepared.proof_sha256.clone(),
+        artifact_name: prepared.artifact_name.clone(),
+        artifact_sha256: prepared.artifact_sha256.clone(),
+        rollout_ring: ring_name(prepared.requested_ring).into(),
     })
+}
+
+fn finalize(
+    mut prepared: PreparedRelease,
+    approval: Option<ApprovalVerification>,
+) -> ReleaseGateDecision {
+    let approval_required = matches!(
+        prepared.plan.change_class,
+        ChangeClass::C3 | ChangeClass::C4
+    );
+
+    let (approval_threshold, valid_approval_signers, approval_warnings) = if approval_required {
+        match approval {
+            Some(verification) => {
+                if !verification.eligible {
+                    prepared.reasons.extend(verification.reasons);
+                }
+                (
+                    verification.required,
+                    verification.valid_signers,
+                    verification.warnings,
+                )
+            }
+            None => {
+                prepared
+                    .reasons
+                    .push("critical release requires cryptographically verified human approval".into());
+                (0, Vec::new(), Vec::new())
+            }
+        }
+    } else {
+        (0, Vec::new(), Vec::new())
+    };
+
+    ReleaseGateDecision {
+        change_id: prepared.plan.id,
+        change_class: prepared.plan.change_class,
+        requested_ring: prepared.requested_ring,
+        maximum_ring: prepared.maximum_ring,
+        artifact_name: prepared.artifact_name,
+        artifact_sha256: prepared.artifact_sha256,
+        proof_sha256: prepared.proof_sha256,
+        evidence_verified: prepared.proof.evidence_verified,
+        approval_required,
+        approval_threshold,
+        valid_approval_signers,
+        approval_warnings,
+        eligible: prepared.reasons.is_empty(),
+        reasons: prepared.reasons,
+    }
 }
 
 pub fn parse_ring(value: &str) -> Result<RolloutRing, ReleaseError> {
