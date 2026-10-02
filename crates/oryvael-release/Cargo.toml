@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 oryvael-protocol = { path = "../oryvael-protocol" }
 oryvael-proof = { path = "../oryvael-proof" }
+oryvael-approval = { path = "../oryvael-approval" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
