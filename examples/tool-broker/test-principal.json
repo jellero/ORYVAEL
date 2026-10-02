@@ -1,0 +1,38 @@
+{
+  "principal": "test-ai/tool-demo",
+  "kind": "ai_agent",
+  "grants": [
+    {
+      "effect": "allow",
+      "resource": "workspace",
+      "actions": ["mount_rw"],
+      "scope": "/workspace",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "process",
+      "actions": ["execute"],
+      "scope": "/usr/bin/python3",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "tool",
+      "actions": ["execute"],
+      "scope": "python.syntax-check",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "deny",
+      "resource": "network",
+      "actions": ["*"],
+      "scope": null,
+      "expires_at": null,
+      "delegable": false
+    }
+  ]
+}
