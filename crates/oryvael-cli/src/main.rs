@@ -5,8 +5,8 @@ use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
-use oryvael_release::check_from_files as check_release_from_files;
 use oryvael_protocol::{Operation, Principal};
+use oryvael_release::check_from_files as check_release_from_files;
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
 use oryvael_workspace::create_from_files as create_workspace_from_files;
@@ -195,8 +195,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             artifact,
             ring,
         } => {
-            let decision =
-                check_release_from_files(plan, input, &artifact_name, artifact, &ring)?;
+            let decision = check_release_from_files(plan, input, &artifact_name, artifact, &ring)?;
             println!("{}", serde_json::to_string_pretty(&decision)?);
             if !decision.eligible {
                 process::exit(5);
