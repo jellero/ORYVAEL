@@ -26,6 +26,14 @@ The worker receives:
 
 The normal host home directory is never mounted.
 
+## Workspace provisioning
+
+The trusted supervisor owns workspace provisioning. A task workspace must be created or adopted under supervisor-controlled ownership before an untrusted worker is launched.
+
+This is not only lifecycle hygiene: user namespaces preserve ownership semantics. Reusing a directory owned by an unrelated host identity can make the mapped sandbox principal unable to write it, or create ambiguous trust over pre-existing content.
+
+Repository/source material should therefore be copied or checked out into a supervisor-provisioned workspace, then exposed to the worker as /workspace.
+
 ## Linux backend
 
 ORYVAEL composes two Linux mechanisms.
