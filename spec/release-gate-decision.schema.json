@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/release-gate-decision.schema.json",
+  "title": "ORYVAEL Release Gate Decision",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "change_id",
+    "change_class",
+    "requested_ring",
+    "maximum_ring",
+    "artifact_name",
+    "artifact_sha256",
+    "proof_sha256",
+    "evidence_verified",
+    "eligible",
+    "reasons"
+  ],
+  "properties": {
+    "change_id": {"type": "string", "minLength": 1},
+    "change_class": {"enum": ["C0", "C1", "C2", "C3", "C4"]},
+    "requested_ring": {"enum": ["none", "simulator", "developer", "canary", "fleet"]},
+    "maximum_ring": {"enum": ["none", "simulator", "developer", "canary", "fleet"]},
+    "artifact_name": {"type": "string", "minLength": 1},
+    "artifact_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "proof_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "evidence_verified": {"type": "boolean"},
+    "eligible": {"type": "boolean"},
+    "reasons": {"type": "array", "items": {"type": "string"}}
+  }
+}
