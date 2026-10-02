@@ -1,0 +1,13 @@
+{
+  "id": "CHG-PROOF-DEMO-001",
+  "intent": "Demonstrate independent C2 release eligibility",
+  "class": "C2",
+  "producer": "developer-ai/proof-demo",
+  "components": ["proof-demo"],
+  "paths": ["src/lib.rs"],
+  "requested_capabilities": ["tool:compiler.check"],
+  "dependencies_added": [],
+  "verification": ["test", "security"],
+  "max_rollout_ring": "canary",
+  "rollback": "Return to the previous content-addressed artifact"
+}
