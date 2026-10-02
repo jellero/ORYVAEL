@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/approval-bundle.schema.json",
+  "title": "ORYVAEL Signed Human Approval Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["approvals"],
+  "properties": {
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "signer_id", "context", "signature_hex"],
+        "properties": {
+          "version": {"const": 1},
+          "signer_id": {"type": "string", "minLength": 1},
+          "context": {"$ref": "approval-context.schema.json"},
+          "signature_hex": {"type": "string", "pattern": "^[a-f0-9]{128}$"}
+        }
+      }
+    }
+  }
+}

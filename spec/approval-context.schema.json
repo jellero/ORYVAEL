@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/approval-context.schema.json",
+  "title": "ORYVAEL Release Approval Context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "change_id",
+    "change_class",
+    "change_plan_sha256",
+    "proof_sha256",
+    "artifact_name",
+    "artifact_sha256",
+    "rollout_ring"
+  ],
+  "properties": {
+    "change_id": {"type": "string", "minLength": 1},
+    "change_class": {"enum": ["C0", "C1", "C2", "C3", "C4"]},
+    "change_plan_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "proof_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "artifact_name": {"type": "string", "minLength": 1},
+    "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "rollout_ring": {"enum": ["none", "simulator", "developer", "canary", "fleet"]}
+  }
+}
