@@ -1,0 +1,17 @@
+{
+  "id": "CHG-WORKSPACE-DEMO-001",
+  "intent": "Provision an isolated Git worktree for an AI development change",
+  "class": "C1",
+  "producer": "developer-ai/workspace-demo",
+  "components": ["workspace-broker"],
+  "paths": [],
+  "requested_capabilities": [
+    "repository:oryvael-demo:read",
+    "workspace:provision",
+    "git:branch:create"
+  ],
+  "dependencies_added": [],
+  "verification": ["git-worktree"],
+  "max_rollout_ring": "none",
+  "rollback": "Remove the generated worktree and branch"
+}
