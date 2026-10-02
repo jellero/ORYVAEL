@@ -484,6 +484,8 @@ jobs:
 
       - name: Build release-grade audited C2 proof
         run: |
+          printf 'ORYVAEL audited release artifact\n' > /tmp/audited-proof-demo.img
+
           operation_id="$(python - <<'PY'
           import json
           with open("/tmp/oryvael-audited-proof-run.json", "r", encoding="utf-8") as handle:
@@ -492,10 +494,15 @@ jobs:
           )"
 
           python - "$operation_id" <<'PY'
+          import hashlib
           import json
           import sys
+          from pathlib import Path
 
           operation_id = sys.argv[1]
+          artifact_hash = hashlib.sha256(
+              Path("/tmp/audited-proof-demo.img").read_bytes()
+          ).hexdigest()
           payload = {
               "source": {
                   "repository": "jellero/ORYVAEL",
@@ -511,7 +518,7 @@ jobs:
               "artifacts": [
                   {
                       "name": "audited-proof-demo.img",
-                      "sha256": "d" * 64,
+                      "sha256": artifact_hash,
                   }
               ],
               "human_approvals": [],
@@ -581,6 +588,82 @@ jobs:
               "change-plan hash does not match evaluated plan" in reason
               for reason in proof["eligibility_reasons"]
           )
+          PY
+
+      - name: Approve audited artifact for canary release
+        run: |
+          sudo ./target/debug/oryvael release-check \
+            --plan examples/audited-proof/c2-plan.json \
+            --input /tmp/oryvael-audited-proof-input.json \
+            --artifact-name audited-proof-demo.img \
+            --artifact /tmp/audited-proof-demo.img \
+            --ring canary \
+            > /tmp/oryvael-release-decision.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-release-decision.json", "r", encoding="utf-8") as handle:
+              decision = json.load(handle)
+
+          assert decision["eligible"] is True
+          assert decision["evidence_verified"] is True
+          assert decision["requested_ring"] == "canary"
+          assert decision["maximum_ring"] == "canary"
+          assert len(decision["artifact_sha256"]) == 64
+          assert len(decision["proof_sha256"]) == 64
+          assert decision["reasons"] == []
+          PY
+
+      - name: Verify artifact mutation vetoes release
+        run: |
+          cp /tmp/audited-proof-demo.img /tmp/audited-proof-demo-tampered.img
+          printf 'tamper\n' >> /tmp/audited-proof-demo-tampered.img
+
+          set +e
+          sudo ./target/debug/oryvael release-check \
+            --plan examples/audited-proof/c2-plan.json \
+            --input /tmp/oryvael-audited-proof-input.json \
+            --artifact-name audited-proof-demo.img \
+            --artifact /tmp/audited-proof-demo-tampered.img \
+            --ring canary \
+            > /tmp/oryvael-release-tampered.json
+          status=$?
+          set -e
+          test "$status" -eq 5
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-release-tampered.json", "r", encoding="utf-8") as handle:
+              decision = json.load(handle)
+
+          assert decision["eligible"] is False
+          assert any("artifact hash mismatch" in reason for reason in decision["reasons"])
+          PY
+
+      - name: Verify rollout ceiling vetoes release
+        run: |
+          set +e
+          sudo ./target/debug/oryvael release-check \
+            --plan examples/audited-proof/c2-plan.json \
+            --input /tmp/oryvael-audited-proof-input.json \
+            --artifact-name audited-proof-demo.img \
+            --artifact /tmp/audited-proof-demo.img \
+            --ring fleet \
+            > /tmp/oryvael-release-over-ceiling.json
+          status=$?
+          set -e
+          test "$status" -eq 5
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-release-over-ceiling.json", "r", encoding="utf-8") as handle:
+              decision = json.load(handle)
+
+          assert decision["eligible"] is False
+          assert any("exceeds plan maximum" in reason for reason in decision["reasons"])
           PY
 
       - name: Verify catalog and plan cannot replace principal authority
