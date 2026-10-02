@@ -1,12 +1,16 @@
 #![forbid(unsafe_code)]
 
 use clap::{Parser, Subcommand};
+use oryvael_approval::{public_key_from_private_file, sign_from_files, verify_from_files};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
 use oryvael_protocol::{Operation, Principal};
-use oryvael_release::check_from_files as check_release_from_files;
+use oryvael_release::{
+    approval_context_from_files, check_from_files as check_release_from_files,
+    check_from_files_with_approvals,
+};
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
 use oryvael_workspace::create_from_files as create_workspace_from_files;
@@ -76,6 +80,38 @@ enum Command {
         #[arg(long)]
         operation_id: String,
     },
+    ReleaseContext {
+        #[arg(long)]
+        plan: String,
+        #[arg(long)]
+        input: String,
+        #[arg(long)]
+        artifact_name: String,
+        #[arg(long)]
+        artifact: String,
+        #[arg(long)]
+        ring: String,
+    },
+    ApprovalPublicKey {
+        #[arg(long)]
+        private_key: String,
+    },
+    ApprovalSign {
+        #[arg(long)]
+        private_key: String,
+        #[arg(long)]
+        signer_id: String,
+        #[arg(long)]
+        context: String,
+    },
+    ApprovalVerify {
+        #[arg(long)]
+        policy: String,
+        #[arg(long)]
+        bundle: String,
+        #[arg(long)]
+        context: String,
+    },
     ReleaseCheck {
         #[arg(long)]
         plan: String,
@@ -87,6 +123,10 @@ enum Command {
         artifact: String,
         #[arg(long)]
         ring: String,
+        #[arg(long)]
+        approval_policy: Option<String>,
+        #[arg(long)]
+        approval_bundle: Option<String>,
     },
 }
 
@@ -188,14 +228,69 @@ fn main() -> Result<(), Box<dyn Error>> {
             let evidence = extract_from_jsonl(audit, &operation_id)?;
             println!("{}", serde_json::to_string_pretty(&evidence)?);
         }
-        Command::ReleaseCheck {
+        Command::ReleaseContext {
             plan,
             input,
             artifact_name,
             artifact,
             ring,
         } => {
-            let decision = check_release_from_files(plan, input, &artifact_name, artifact, &ring)?;
+            let context =
+                approval_context_from_files(plan, input, &artifact_name, artifact, &ring)?;
+            println!("{}", serde_json::to_string_pretty(&context)?);
+        }
+        Command::ApprovalPublicKey { private_key } => {
+            println!("{}", public_key_from_private_file(private_key)?);
+        }
+        Command::ApprovalSign {
+            private_key,
+            signer_id,
+            context,
+        } => {
+            let approval = sign_from_files(private_key, &signer_id, context)?;
+            println!("{}", serde_json::to_string_pretty(&approval)?);
+        }
+        Command::ApprovalVerify {
+            policy,
+            bundle,
+            context,
+        } => {
+            let verification = verify_from_files(policy, bundle, context)?;
+            println!("{}", serde_json::to_string_pretty(&verification)?);
+            if !verification.eligible {
+                process::exit(6);
+            }
+        }
+        Command::ReleaseCheck {
+            plan,
+            input,
+            artifact_name,
+            artifact,
+            ring,
+            approval_policy,
+            approval_bundle,
+        } => {
+            let decision = match (approval_policy, approval_bundle) {
+                (Some(policy), Some(bundle)) => check_from_files_with_approvals(
+                    plan,
+                    input,
+                    &artifact_name,
+                    artifact,
+                    &ring,
+                    policy,
+                    bundle,
+                )?,
+                (None, None) => {
+                    check_release_from_files(plan, input, &artifact_name, artifact, &ring)?
+                }
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--approval-policy and --approval-bundle must be provided together",
+                    )
+                    .into());
+                }
+            };
             println!("{}", serde_json::to_string_pretty(&decision)?);
             if !decision.eligible {
                 process::exit(5);
