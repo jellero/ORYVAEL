@@ -268,7 +268,7 @@ fn eligibility_reasons(plan: &ChangePlan, input: &ProofInput) -> Vec<String> {
             continue;
         }
 
-            if requires_independent_verifier(&plan.change_class)
+        if requires_independent_verifier(&plan.change_class)
             && !passes
                 .iter()
                 .any(|verifier| verifier.principal != plan.producer)
