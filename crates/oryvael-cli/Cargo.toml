@@ -16,6 +16,7 @@ oryvael-audit = { path = "../oryvael-audit" }
 oryvael-arch = { path = "../oryvael-arch" }
 oryvael-supervisor = { path = "../oryvael-supervisor" }
 oryvael-tool-broker = { path = "../oryvael-tool-broker" }
+oryvael-proof = { path = "../oryvael-proof" }
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
