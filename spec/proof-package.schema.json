@@ -7,6 +7,8 @@
   "required": [
     "change_id",
     "change_class",
+    "change_plan_sha256",
+    "evidence_verified",
     "source",
     "verifiers",
     "artifacts",
@@ -118,6 +120,16 @@
       "items": {
         "type": "string"
       }
+    },
+    "change_plan_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "evidence_verified": {
+      "type": "boolean"
     }
   }
 }
