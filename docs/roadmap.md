@@ -67,13 +67,12 @@ Delivered foundation:
 - fixed argv, network policy, timeout and resource limits per catalog action.
 
 Next deliverables:
-- brokered Git worktree/branch operations;
+- brokered Git worktree/branch operations with registry-controlled paths;
 - Rust compiler/test/fuzz profiles;
 - Architect, Developer, Test, Security and Reviewer principals;
 - immutable change-plan binding;
 - deterministic proof-package generator and eligibility engine;
 - protected verifier results;
-- Git branch/worktree broker;
 - compiler/test/fuzz broker;
 - reproducible build workers;
 - dependency/SBOM service;
