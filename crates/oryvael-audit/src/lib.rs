@@ -3,6 +3,9 @@
 use oryvael_protocol::AuditEvent;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::fs::{self, File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -34,6 +37,85 @@ pub enum AuditError {
     Hash { index: usize },
     #[error("event serialization failed: {0}")]
     Serialization(String),
+    #[error("audit I/O failed: {0}")]
+    Io(String),
+    #[error("audit JSON is invalid: {0}")]
+    Json(String),
+}
+
+pub struct JsonlAuditJournal {
+    path: PathBuf,
+    ledger: AuditLedger,
+    file: File,
+}
+
+impl JsonlAuditJournal {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, AuditError> {
+        let path = path.as_ref();
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| AuditError::Io(error.to_string()))?;
+        }
+
+        let ledger = if path.exists() {
+            let file = File::open(path).map_err(|error| AuditError::Io(error.to_string()))?;
+            let reader = BufReader::new(file);
+            let mut records = Vec::new();
+
+            for (index, line) in reader.lines().enumerate() {
+                let line = line.map_err(|error| AuditError::Io(error.to_string()))?;
+                if line.trim().is_empty() {
+                    continue;
+                }
+
+                let record: AuditRecord = serde_json::from_str(&line).map_err(|error| {
+                    AuditError::Json(format!("line {}: {error}", index + 1))
+                })?;
+                records.push(record);
+            }
+
+            let ledger = AuditLedger::from_records(records);
+            ledger.verify()?;
+            ledger
+        } else {
+            AuditLedger::new()
+        };
+
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|error| AuditError::Io(error.to_string()))?;
+
+        Ok(Self {
+            path: path.to_path_buf(),
+            ledger,
+            file,
+        })
+    }
+
+    pub fn append(&mut self, event: AuditEvent) -> Result<AuditRecord, AuditError> {
+        let record = self.ledger.append(event)?.clone();
+
+        serde_json::to_writer(&mut self.file, &record)
+            .map_err(|error| AuditError::Serialization(error.to_string()))?;
+        self.file
+            .write_all(b"\n")
+            .map_err(|error| AuditError::Io(error.to_string()))?;
+        self.file
+            .sync_data()
+            .map_err(|error| AuditError::Io(error.to_string()))?;
+
+        Ok(record)
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn records(&self) -> &[AuditRecord] {
+        self.ledger.records()
+    }
 }
 
 impl AuditLedger {
