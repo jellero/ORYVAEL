@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "tools": [
+    {
+      "id": "python",
+      "executable": "/usr/bin/python3",
+      "actions": {
+        "syntax-check": {
+          "argv": ["-m", "py_compile", "/workspace/src/demo.py"],
+          "network": "deny",
+          "read_only_paths": [],
+          "timeout_seconds": 10,
+          "limits": {
+            "memory_bytes": 536870912,
+            "cpu_seconds": 5,
+            "file_size_bytes": 8388608
+          }
+        }
+      }
+    },
+    {
+      "id": "git",
+      "executable": "/usr/bin/git",
+      "actions": {
+        "status": {
+          "argv": ["status", "--short"],
+          "network": "deny",
+          "read_only_paths": [],
+          "timeout_seconds": 10,
+          "limits": {
+            "memory_bytes": 536870912,
+            "cpu_seconds": 5,
+            "file_size_bytes": 8388608
+          }
+        }
+      }
+    }
+  ]
+}
