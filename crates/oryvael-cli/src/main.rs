@@ -4,7 +4,9 @@ use clap::{Parser, Subcommand};
 use oryvael_approval::{public_key_from_private_file, sign_from_files, verify_from_files};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
-use oryvael_build::build_from_files as build_manifest_from_files;
+use oryvael_build::{
+    build_from_files as build_manifest_from_files, compare_from_files as compare_builds_from_files,
+};
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
 use oryvael_protocol::{Operation, Principal};
@@ -118,6 +120,12 @@ enum Command {
         plan: String,
         #[arg(long)]
         input: String,
+    },
+    BuildCompare {
+        #[arg(long)]
+        left: String,
+        #[arg(long)]
+        right: String,
     },
     ReleaseCheck {
         #[arg(long)]
@@ -271,6 +279,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::BuildManifest { plan, input } => {
             let manifest = build_manifest_from_files(plan, input)?;
             println!("{}", serde_json::to_string_pretty(&manifest)?);
+        }
+        Command::BuildCompare { left, right } => {
+            let report = compare_builds_from_files(left, right)?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            if !report.reproducible {
+                process::exit(7);
+            }
         }
         Command::ReleaseCheck {
             plan,
