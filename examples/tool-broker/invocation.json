@@ -1,0 +1,11 @@
+{
+  "principal": "developer-ai/tool-demo",
+  "role": "developer",
+  "change_id": "CHG-TOOL-DEMO-001",
+  "change_plan": "examples/tool-broker/change-plan.json",
+  "workspace": "/tmp/oryvael-tool-demo-workspace",
+  "tool": "python",
+  "action": "syntax-check",
+  "audit_log": "/tmp/oryvael-tool-demo-control/audit.jsonl",
+  "artifact_store": "/tmp/oryvael-tool-demo-control/artifacts"
+}
