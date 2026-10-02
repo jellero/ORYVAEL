@@ -3,11 +3,20 @@
   "intent": "Verify a C2 change with evidence derived from an independent audited Test AI run",
   "class": "C2",
   "producer": "developer-ai/tool-demo",
-  "components": ["audited-proof-demo"],
-  "paths": ["src/demo.py"],
-  "requested_capabilities": ["tool:python.syntax-check"],
+  "components": [
+    "audited-proof-demo"
+  ],
+  "paths": [
+    "src/demo.py"
+  ],
+  "requested_capabilities": [
+    "tool:python.syntax-check",
+    "build:manifest"
+  ],
   "dependencies_added": [],
-  "verification": ["python.syntax-check"],
+  "verification": [
+    "python.syntax-check"
+  ],
   "max_rollout_ring": "canary",
   "rollback": "Discard the candidate artifact and isolated workspace"
 }
