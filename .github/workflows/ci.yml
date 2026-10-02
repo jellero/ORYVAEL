@@ -256,6 +256,9 @@ jobs:
       - name: Build ORYVAEL CLI
         run: cargo build --locked -p oryvael-cli
 
+      - name: Capture locked release dependency graph
+        run: cargo metadata --locked --format-version 1 > /tmp/oryvael-release-cargo-metadata.json
+
       - name: Report rootless host capability
         run: |
           set +e
@@ -651,6 +654,34 @@ jobs:
           artifact_hash = hashlib.sha256(
               Path("/tmp/audited-proof-demo.img").read_bytes()
           ).hexdigest()
+          build_input = {
+              "change_id": "CHG-AUDITED-PROOF-001",
+              "builder_principal": "build-service/reference",
+              "source": {
+                  "repository": "jellero/ORYVAEL",
+                  "commit": "audited-proof-demo-source",
+                  "tree": None,
+              },
+              "toolchain": {
+                  "name": "rust",
+                  "version": "1.85.0",
+                  "sha256": None,
+              },
+              "target": "x86_64-unknown-linux-gnu",
+              "profile": "release",
+              "build_command": ["reference-demo-build", "audited-proof-demo.img"],
+              "cargo_lock": "Cargo.lock",
+              "cargo_metadata": "/tmp/oryvael-release-cargo-metadata.json",
+              "artifacts": [
+                  {
+                      "name": "audited-proof-demo.img",
+                      "path": "/tmp/audited-proof-demo.img",
+                  }
+              ],
+          }
+          with open("/tmp/oryvael-c2-build-input.json", "w", encoding="utf-8") as handle:
+              json.dump(build_input, handle)
+
           payload = {
               "source": {
                   "repository": "jellero/ORYVAEL",
@@ -669,6 +700,7 @@ jobs:
                       "sha256": artifact_hash,
                   }
               ],
+              "build_manifest_input": "/tmp/oryvael-c2-build-input.json",
               "human_approvals": [],
           }
 
@@ -692,6 +724,9 @@ jobs:
           assert len(proof["change_plan_sha256"]) == 64
           assert proof["eligibility_reasons"] == []
           assert len(proof["verifiers"]) == 1
+          assert len(proof["build"]["manifest_sha256"]) == 64
+          assert len(proof["build"]["sbom_sha256"]) == 64
+          assert len(proof["build"]["cargo_lock_sha256"]) == 64
 
           verifier = proof["verifiers"][0]
           assert verifier["name"] == "python.syntax-check"
@@ -849,6 +884,34 @@ jobs:
 
           artifact_hash = hashlib.sha256(Path("/tmp/oryvael-c3.img").read_bytes()).hexdigest()
 
+          build_input = {
+              "change_id": "CHG-CRITICAL-APPROVAL-001",
+              "builder_principal": "build-service/reference",
+              "source": {
+                  "repository": "jellero/ORYVAEL",
+                  "commit": "critical-approval-demo-source",
+                  "tree": None,
+              },
+              "toolchain": {
+                  "name": "rust",
+                  "version": "1.85.0",
+                  "sha256": None,
+              },
+              "target": "x86_64-unknown-linux-gnu",
+              "profile": "release",
+              "build_command": ["reference-demo-build", "oryvael-c3.img"],
+              "cargo_lock": "Cargo.lock",
+              "cargo_metadata": "/tmp/oryvael-release-cargo-metadata.json",
+              "artifacts": [
+                  {
+                      "name": "oryvael-c3.img",
+                      "path": "/tmp/oryvael-c3.img",
+                  }
+              ],
+          }
+          with open("/tmp/oryvael-c3-build-input.json", "w", encoding="utf-8") as handle:
+              json.dump(build_input, handle)
+
           payload = {
               "source": {
                   "repository": "jellero/ORYVAEL",
@@ -871,6 +934,7 @@ jobs:
                       "sha256": artifact_hash,
                   }
               ],
+              "build_manifest_input": "/tmp/oryvael-c3-build-input.json",
               "human_approvals": [],
           }
 
@@ -892,6 +956,9 @@ jobs:
           assert proof["eligible"] is True
           assert proof["change_class"] == "C3"
           assert proof["evidence_verified"] is True
+          assert len(proof["build"]["manifest_sha256"]) == 64
+          assert len(proof["build"]["sbom_sha256"]) == 64
+          assert len(proof["build"]["cargo_lock_sha256"]) == 64
           roles = {item.get("role") for item in proof["verifiers"]}
           assert "test" in roles
           assert "security" in roles
