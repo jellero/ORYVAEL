@@ -109,8 +109,7 @@ pub fn verify_from_files(
 ) -> Result<ApprovalVerification, ApprovalError> {
     let policy: ApprovalTrustPolicy =
         serde_json::from_str(&fs::read_to_string(policy_path.as_ref())?)?;
-    let bundle: ApprovalBundle =
-        serde_json::from_str(&fs::read_to_string(bundle_path.as_ref())?)?;
+    let bundle: ApprovalBundle = serde_json::from_str(&fs::read_to_string(bundle_path.as_ref())?)?;
     let context: ApprovalContext =
         serde_json::from_str(&fs::read_to_string(context_path.as_ref())?)?;
     verify(&policy, &bundle, &context)
@@ -258,8 +257,8 @@ pub fn threshold_for(thresholds: &ApprovalThresholds, class: &ChangeClass) -> u3
 
 fn load_signing_key(path: impl AsRef<Path>) -> Result<SigningKey, ApprovalError> {
     let encoded = fs::read_to_string(path)?;
-    let decoded =
-        hex::decode(encoded.trim()).map_err(|error| ApprovalError::InvalidHex(error.to_string()))?;
+    let decoded = hex::decode(encoded.trim())
+        .map_err(|error| ApprovalError::InvalidHex(error.to_string()))?;
     let bytes: [u8; 32] = decoded
         .try_into()
         .map_err(|_| ApprovalError::InvalidPrivateKeyLength)?;
@@ -338,7 +337,12 @@ mod tests {
             signers: vec![],
         };
 
-        let result = verify(&policy, &ApprovalBundle::default(), &context(ChangeClass::C2)).unwrap();
+        let result = verify(
+            &policy,
+            &ApprovalBundle::default(),
+            &context(ChangeClass::C2),
+        )
+        .unwrap();
         assert!(result.eligible);
         assert_eq!(result.required, 0);
     }
