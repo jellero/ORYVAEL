@@ -282,9 +282,9 @@ fn finalize(
                 )
             }
             None => {
-                prepared
-                    .reasons
-                    .push("critical release requires cryptographically verified human approval".into());
+                prepared.reasons.push(
+                    "critical release requires cryptographically verified human approval".into(),
+                );
                 (0, Vec::new(), Vec::new())
             }
         }
