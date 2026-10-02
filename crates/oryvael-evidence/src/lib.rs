@@ -191,7 +191,7 @@ fn is_sha256(value: &str) -> bool {
 mod tests {
     use super::*;
     use oryvael_audit::AuditLedger;
-    use oryvael_protocol::{AuditEvent, AuditDecision};
+    use oryvael_protocol::{AuditDecision, AuditEvent};
     use std::collections::BTreeMap;
 
     fn event(
