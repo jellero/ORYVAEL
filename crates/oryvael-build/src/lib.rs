@@ -193,8 +193,7 @@ pub fn build_from_files(
 
     let cargo_lock_sha256 = sha256_file(&input.cargo_lock)?;
 
-    let metadata: CargoMetadata =
-        serde_json::from_slice(&fs::read(&input.cargo_metadata)?)?;
+    let metadata: CargoMetadata = serde_json::from_slice(&fs::read(&input.cargo_metadata)?)?;
     let components = normalize_components(metadata)?;
     let sbom_payload = serde_json::to_vec(&(SBOM_FORMAT, &components))?;
     let sbom = Sbom {
@@ -371,7 +370,10 @@ fn validate_input(input: &BuildManifestInput) -> Result<(), BuildManifestError> 
     }
 
     if input.build_command.is_empty()
-        || input.build_command.iter().any(|part| part.trim().is_empty())
+        || input
+            .build_command
+            .iter()
+            .any(|part| part.trim().is_empty())
     {
         return Err(BuildManifestError::InvalidInput(
             "build_command must contain non-empty arguments".into(),
@@ -434,10 +436,7 @@ fn normalize_components(
             workspace,
         );
 
-        if stable_ids
-            .insert(package.id.clone(), stable_id)
-            .is_some()
-        {
+        if stable_ids.insert(package.id.clone(), stable_id).is_some() {
             return Err(BuildManifestError::InvalidInput(format!(
                 "duplicate cargo metadata package id: {}",
                 package.id
@@ -497,12 +496,7 @@ fn normalize_components(
     Ok(components)
 }
 
-fn stable_component_id(
-    name: &str,
-    version: &str,
-    source: Option<&str>,
-    workspace: bool,
-) -> String {
+fn stable_component_id(name: &str, version: &str, source: Option<&str>, workspace: bool) -> String {
     if workspace {
         format!("workspace:{name}@{version}")
     } else {
