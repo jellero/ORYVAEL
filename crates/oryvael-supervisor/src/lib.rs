@@ -307,7 +307,10 @@ fn run_job_with_context(
     let operation_id = new_operation_id();
 
     let mut start_metadata = BTreeMap::new();
-    start_metadata.insert("network".into(), format!("{:?}", spec.network).to_lowercase());
+    start_metadata.insert(
+        "network".into(),
+        format!("{:?}", spec.network).to_lowercase(),
+    );
     start_metadata.insert("command".into(), spec.command[0].clone());
     if let Some(hash) = principal_hash {
         start_metadata.insert("principal_policy_sha256".into(), hash);
@@ -551,9 +554,7 @@ fn prepare_job(spec: &JobSpec) -> Result<PreparedJob, SupervisorError> {
         let destination = absolute_path(requested)?;
         let source = fs::canonicalize(&destination)?;
         if source.starts_with(&workspace) || destination.starts_with(&workspace) {
-            return Err(SupervisorError::ReadOnlyPathOverlapsWorkspace(
-                destination,
-            ));
+            return Err(SupervisorError::ReadOnlyPathOverlapsWorkspace(destination));
         }
         read_only_paths.push((source, destination));
     }
@@ -673,7 +674,9 @@ pub fn build_sandbox_command(
 }
 
 fn has_limits(limits: &ResourceLimits) -> bool {
-    limits.memory_bytes.is_some() || limits.cpu_seconds.is_some() || limits.file_size_bytes.is_some()
+    limits.memory_bytes.is_some()
+        || limits.cpu_seconds.is_some()
+        || limits.file_size_bytes.is_some()
 }
 
 fn system_runtime_paths(network: NetworkMode) -> Vec<PathBuf> {
@@ -895,9 +898,11 @@ mod tests {
             build_sandbox_command(&principal(), &spec, &prepared(workspace), "op-test").unwrap();
 
         assert_eq!(command.program, OsString::from("prlimit"));
-        assert!(command
-            .args
-            .iter()
-            .any(|arg| arg.to_string_lossy().starts_with("--as=")));
+        assert!(
+            command
+                .args
+                .iter()
+                .any(|arg| arg.to_string_lossy().starts_with("--as="))
+        );
     }
 }
