@@ -1,6 +1,9 @@
 #![forbid(unsafe_code)]
 
-use oryvael_build::{BuildManifestError, build_from_files as build_manifest_from_files};
+use oryvael_build::{
+    BuildManifest, BuildManifestError, build_from_files as build_manifest_from_files,
+    compare as compare_builds,
+};
 use oryvael_evidence::{EvidenceError, EvidenceStatus, VerifiedEvidence, extract_from_jsonl};
 use oryvael_protocol::{ChangeClass, ChangePlan};
 use serde::{Deserialize, Serialize};
@@ -70,6 +73,8 @@ pub struct AuditedProofInput {
     #[serde(default)]
     pub build_manifest_input: Option<PathBuf>,
     #[serde(default)]
+    pub reproducible_build_input: Option<PathBuf>,
+    #[serde(default)]
     pub human_approvals: Vec<String>,
 }
 
@@ -78,6 +83,11 @@ pub struct BuildBinding {
     pub manifest_sha256: String,
     pub sbom_sha256: String,
     pub cargo_lock_sha256: String,
+    pub reproducible: bool,
+    #[serde(default)]
+    pub independent_builder: Option<String>,
+    #[serde(default)]
+    pub reproducible_manifest_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -164,38 +174,55 @@ pub fn build_audited_from_files(
     let build = match input.build_manifest_input.as_ref() {
         Some(build_input) => {
             let manifest = build_manifest_from_files(plan_path, build_input)?;
+            validate_build_manifest(
+                &manifest,
+                &input.source,
+                &input.artifacts,
+                "primary",
+                &mut audited_reasons,
+            );
 
-            if manifest.source.repository != input.source.repository
-                || manifest.source.commit != input.source.commit
-                || manifest.source.tree != input.source.tree
-            {
+            let mut binding = BuildBinding {
+                manifest_sha256: manifest.manifest_sha256.clone(),
+                sbom_sha256: manifest.sbom.sha256.clone(),
+                cargo_lock_sha256: manifest.cargo_lock_sha256.clone(),
+                reproducible: false,
+                independent_builder: None,
+                reproducible_manifest_sha256: None,
+            };
+
+            if let Some(reproducible_input) = input.reproducible_build_input.as_ref() {
+                let independent = build_manifest_from_files(plan_path, reproducible_input)?;
+                validate_build_manifest(
+                    &independent,
+                    &input.source,
+                    &input.artifacts,
+                    "independent",
+                    &mut audited_reasons,
+                );
+
+                let report = compare_builds(&manifest, &independent);
+                if !report.reproducible {
+                    audited_reasons.extend(
+                        report
+                            .reasons
+                            .iter()
+                            .map(|reason| format!("reproducible build: {reason}")),
+                    );
+                }
+
+                binding.reproducible = report.reproducible;
+                binding.independent_builder = Some(independent.builder_principal.clone());
+                binding.reproducible_manifest_sha256 =
+                    Some(independent.manifest_sha256.clone());
+            } else if requires_reproducible_build(&plan) {
                 audited_reasons.push(
-                    "build manifest source identity does not match proof source".into(),
+                    "change plan requires build:reproducible but no independent build input was provided"
+                        .into(),
                 );
             }
 
-            let declared_artifacts = input
-                .artifacts
-                .iter()
-                .map(|artifact| (artifact.name.as_str(), artifact.sha256.as_str()))
-                .collect::<BTreeSet<_>>();
-            let built_artifacts = manifest
-                .artifacts
-                .iter()
-                .map(|artifact| (artifact.name.as_str(), artifact.sha256.as_str()))
-                .collect::<BTreeSet<_>>();
-
-            if declared_artifacts != built_artifacts {
-                audited_reasons.push(
-                    "proof artifact set does not match deterministic build manifest".into(),
-                );
-            }
-
-            Some(BuildBinding {
-                manifest_sha256: manifest.manifest_sha256,
-                sbom_sha256: manifest.sbom.sha256,
-                cargo_lock_sha256: manifest.cargo_lock_sha256,
-            })
+            Some(binding)
         }
         None => {
             if matches!(
@@ -204,6 +231,11 @@ pub fn build_audited_from_files(
             ) {
                 audited_reasons.push(
                     "release-grade C2/C3/C4 proof requires deterministic build provenance".into(),
+                );
+            }
+            if input.reproducible_build_input.is_some() {
+                audited_reasons.push(
+                    "independent build input cannot be used without a primary build input".into(),
                 );
             }
             None
@@ -253,6 +285,45 @@ fn build_internal(
         eligibility_reasons: reasons,
         human_approvals: input.human_approvals,
     }
+}
+
+fn validate_build_manifest(
+    manifest: &BuildManifest,
+    source: &SourceRef,
+    artifacts: &[ArtifactEvidence],
+    label: &str,
+    reasons: &mut Vec<String>,
+) {
+    if manifest.source.repository != source.repository
+        || manifest.source.commit != source.commit
+        || manifest.source.tree != source.tree
+    {
+        reasons.push(format!(
+            "{label} build manifest source identity does not match proof source"
+        ));
+    }
+
+    let declared_artifacts = artifacts
+        .iter()
+        .map(|artifact| (artifact.name.as_str(), artifact.sha256.as_str()))
+        .collect::<BTreeSet<_>>();
+    let built_artifacts = manifest
+        .artifacts
+        .iter()
+        .map(|artifact| (artifact.name.as_str(), artifact.sha256.as_str()))
+        .collect::<BTreeSet<_>>();
+
+    if declared_artifacts != built_artifacts {
+        reasons.push(format!(
+            "{label} build artifact set does not match proof artifacts"
+        ));
+    }
+}
+
+fn requires_reproducible_build(plan: &ChangePlan) -> bool {
+    plan.requested_capabilities
+        .iter()
+        .any(|capability| capability == "build:reproducible")
 }
 
 fn map_verified_evidence(evidence: &VerifiedEvidence) -> VerifierEvidence {
