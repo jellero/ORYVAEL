@@ -83,6 +83,59 @@ jobs:
           test "$(cat /tmp/oryvael-demo-workspace/generated.txt)" = "ORYVAEL sandbox OK"
           test ! -e /oryvael-escape
 
+      - name: Verify AI cannot self-grant network
+        run: |
+          python - <<'PY'
+          import json
+
+          source = "examples/supervisor/job.json"
+          target = "/tmp/oryvael-network-denied-job.json"
+          with open(source, "r", encoding="utf-8") as handle:
+              job = json.load(handle)
+
+          job["network"] = "host"
+          job["audit_log"] = "/tmp/oryvael-network-denied-control/audit.jsonl"
+          job["artifact_store"] = "/tmp/oryvael-network-denied-control/artifacts"
+
+          with open(target, "w", encoding="utf-8") as handle:
+              json.dump(job, handle)
+          PY
+
+          set +e
+          sudo ./target/debug/oryvael supervise             --principal examples/supervisor/developer-principal.json             --job /tmp/oryvael-network-denied-job.json
+          status=$?
+          set -e
+          test "$status" -ne 0
+
+          ./target/debug/oryvael audit-verify             /tmp/oryvael-network-denied-control/audit.jsonl
+
+          python - <<'PY'
+          import json
+
+          path = "/tmp/oryvael-network-denied-control/audit.jsonl"
+          with open(path, "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          denied = [
+              record["event"]
+              for record in records
+              if record["event"]["action"] == "policy.evaluate"
+              and record["event"]["decision"] == "denied"
+              and record["event"]["metadata"].get("resource") == "network"
+          ]
+          assert denied, "expected a denied network capability decision"
+          PY
+
+      - name: Verify control files cannot be worker-writable
+        run: |
+          cp examples/supervisor/job.json             /tmp/oryvael-demo-workspace/self-modifiable-job.json
+
+          set +e
+          sudo ./target/debug/oryvael supervise             --principal examples/supervisor/developer-principal.json             --job /tmp/oryvael-demo-workspace/self-modifiable-job.json
+          status=$?
+          set -e
+          test "$status" -ne 0
+
       - name: Verify audit chain
         run: |
           ./target/debug/oryvael audit-verify /tmp/oryvael-demo-control/audit.jsonl
