@@ -2,98 +2,156 @@
 
 ## Scope
 
-Phase 1 introduces a Linux supervisor that launches untrusted workers inside a constrained sandbox.
+Phase 1 implements a Linux supervisor that launches untrusted AI/tool workers inside a deterministic security boundary.
 
-The supervisor is deterministic Rust code. It contains no LLM SDK and does not decide policy probabilistically.
+The supervisor is Rust Trusted Core code. It contains no LLM SDK and does not make authorization decisions probabilistically.
 
-## Security boundary
+## Authority model
 
-A job has two control files:
+The supervisor is the privileged mechanism. The worker is not.
+
+A job has two external control inputs:
 - principal policy;
 - job specification.
 
-Both must be outside the writable worker workspace.
+Both must be outside the writable worker workspace. The supervisor hashes those inputs and records the hashes in the run audit metadata.
 
-The worker receives only:
-- a writable /workspace;
-- selected system runtime paths mounted read-only;
-- explicitly approved extra read-only host paths;
-- /proc and a minimal /dev;
-- a clean environment with ORYVAEL identity metadata.
+The worker receives:
+- one writable /workspace;
+- selected runtime paths mounted read-only;
+- explicitly approved additional read-only host paths;
+- isolated process/IPC/UTS state;
+- an isolated network namespace when network mode is deny;
+- a clean environment containing only the small runtime environment plus ORYVAEL identity metadata.
 
-The host home directory is not mounted.
+The normal host home directory is never mounted.
 
 ## Linux backend
 
-Reference enforcement uses Bubblewrap.
+ORYVAEL composes two Linux mechanisms.
 
-Default isolation:
-- user namespace;
-- PID namespace;
-- IPC namespace;
-- UTS namespace;
-- cgroup namespace when available;
-- independent network namespace;
-- new terminal session;
-- process dies with sandbox parent.
+### Namespace envelope
 
-Network is denied by default.
+util-linux unshare creates the outer user namespace and, for network-denied jobs, the network namespace.
 
-If a job explicitly requests host network, the principal must hold the network.connect capability for *.
+This is deliberately separated from Bubblewrap. On some modern Ubuntu configurations, AppArmor allows privileged user-namespace creation while restricting unprivileged user namespaces. The supervisor therefore detects rootless availability instead of weakening host security policy.
 
-## Filesystem
+### Filesystem/process sandbox
 
-The task workspace is the only normal writable host mount.
+Bubblewrap creates the mount/process containment layer.
 
-HOME is placed under /workspace/.oryvael/runtime/home.
+The sandbox root is remounted read-only. After that operation, only the task workspace is bind-mounted writable at /workspace.
 
-TMPDIR is placed under /workspace/.oryvael/runtime/tmp, and /tmp is a symlink into that workspace subtree.
+System runtime files such as /usr, /bin, /lib and the dynamic-loader configuration are mounted read-only.
 
-System runtime directories such as /usr, /bin and loader paths are mounted read-only. This is a baseline execution environment, not access to user data.
+HOME is /workspace/.oryvael/runtime/home.
 
-Additional host paths require an explicit host_path.read capability.
+TMPDIR is /workspace/.oryvael/runtime/tmp and /tmp resolves into that workspace-owned runtime directory.
+
+This gives the worker no persistent writable host path outside its workspace.
+
+## Network
+
+NetworkMode::Deny is the default.
+
+For a denied-network job, the supervisor creates a separate network namespace before the worker starts. No host network namespace is inherited.
+
+NetworkMode::Host requires an explicit policy decision for:
+
+    resource: network
+    action: connect
+    target: "*"
+
+A job request cannot grant this capability to itself. Explicit deny still has precedence.
+
+## Rootless versus trusted-service execution
+
+ORYVAEL probes whether the host allows the required unprivileged user/network namespace operation.
+
+If the probe succeeds, the same supervisor can run rootless.
+
+If the probe fails, ORYVAEL does not silently execute unsandboxed. The intended OS deployment model is a small trusted supervisor service with the privilege required to construct namespaces on behalf of untrusted workers.
+
+The reference CI tests both facts:
+- the rootless probe can report unavailable;
+- the trusted privileged path must still pass the complete confinement test.
 
 ## Resource limits
 
-When a job declares memory, CPU-time or per-file-size limits, the supervisor wraps Bubblewrap with Linux prlimit.
+Wall-clock timeout is always supervised externally.
 
-No requested resource limit silently degrades. If prlimit or Bubblewrap cannot start, the run fails.
+When a job declares:
+- memory_bytes;
+- cpu_seconds;
+- file_size_bytes;
 
-Wall-clock timeout is independently enforced by the supervisor.
+the supervisor wraps namespace creation with Linux prlimit.
+
+A requested resource control is not silently discarded. Failure to start a required enforcement primitive fails the job.
+
+## Capability checks
+
+Before the sandbox starts, the supervisor evaluates:
+- workspace.mount_rw for /workspace;
+- process.execute for the requested entry executable;
+- network.connect when host networking is requested;
+- host_path.read for every additional host path.
+
+Policy is explicit-deny-first and default-deny.
 
 ## Audit
 
-Each run receives one operation ID.
+Each run receives one operation_id.
 
-The audit log records:
+The JSONL journal records:
 - run request;
 - every policy evaluation;
-- sandbox start;
-- sandbox exit or failure;
+- sandbox start or launch failure;
+- sandbox exit;
+- result status;
 - stdout/stderr artifact hashes.
 
-The audit file is outside the workspace and the worker never receives it as a mount.
+Before appending, the supervisor reloads and verifies the complete existing hash chain. Corruption is fail-closed.
 
-On startup the complete existing hash chain is verified. A corrupted audit log makes the supervisor fail closed.
+The journal is outside /workspace and is never mounted into the worker.
 
-The Phase 1 JSONL journal is single-writer by design. Multi-process centralized audit is deferred to the audit service milestone.
+The current Phase 1 journal is a single-writer local primitive. A long-running centralized audit service remains a hardening task, not a missing confinement control for the local supervisor.
 
-## Artifacts
+## Artifact store
 
-stdout and stderr are copied after execution into a content-addressed SHA-256 store outside the workspace.
+stdout and stderr are copied after execution into a SHA-256 content-addressed store outside the workspace.
 
-The worker cannot rewrite those stored artifacts after completion.
+The returned JobResult contains:
+- operation_id;
+- success/timed_out;
+- exit code;
+- stdout artifact hash/path;
+- stderr artifact hash/path;
+- audit path.
 
-## Important limitation
+## CI assurance
 
-Phase 1 authorizes the worker executable being launched, but does not yet provide a syscall-level allowlist for every child executable that the worker starts inside its sandbox.
+The sandbox-smoke job executes the real Linux sandbox and verifies:
+1. the worker can write its task workspace;
+2. writing to the sandbox root outside /workspace is rejected;
+3. a network-denied worker cannot establish the test network connection;
+4. no escape marker appears on the host;
+5. the resulting audit chain verifies;
+6. all privileged audit events carry an operation_id;
+7. a principal with explicit network deny cannot self-grant host networking through its job specification;
+8. a job control file inside the writable worker workspace is rejected.
 
-This does not grant host filesystem or host network access: child processes remain inside the same namespace and mount boundary. A brokered per-tool execution model is planned for the AI Development Factory phase.
+These are implementation tests, not a claim of complete sandbox security.
 
-## Host prerequisites
+## Current limitations
 
-Reference Linux host:
-- bubblewrap (bwrap);
-- prlimit from util-linux when resource limits are requested.
+Phase 1 authorizes the entry executable but does not yet broker every child exec separately. Child processes remain inside the same filesystem/network sandbox, but tool-level authorization will move into the Phase 2 Tool Broker.
 
-If unprivileged user namespaces are disabled, Bubblewrap may fail. ORYVAEL treats that as an unavailable mandatory control rather than falling back to unsandboxed execution.
+The current reference also does not yet provide:
+- seccomp profiles generated per tool;
+- Landlock defense in depth;
+- a persistent supervisor daemon protocol;
+- remote/anchored audit checkpoints;
+- cgroup-v2 resource accounting across a fleet.
+
+Those are explicit follow-on hardening items.
