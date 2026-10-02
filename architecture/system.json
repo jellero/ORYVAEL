@@ -111,7 +111,8 @@
         "oryvael-supervisor",
         "oryvael-tool-broker",
         "oryvael-proof",
-        "oryvael-workspace"
+        "oryvael-workspace",
+        "oryvael-evidence"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
@@ -121,7 +122,8 @@
         "oryvael-supervisor",
         "oryvael-tool-broker",
         "oryvael-proof",
-        "oryvael-workspace"
+        "oryvael-workspace",
+        "oryvael-evidence"
       ],
       "forbidden_dependencies": [],
       "capabilities_required": [],
@@ -191,6 +193,27 @@
       ],
       "capabilities_exposed": [
         "workspace.git-worktree.create"
+      ]
+    },
+    {
+      "id": "oryvael-evidence",
+      "layer": "trusted_core",
+      "dependencies": [
+        "oryvael-protocol",
+        "oryvael-audit"
+      ],
+      "allowed_dependencies": [
+        "oryvael-protocol",
+        "oryvael-audit"
+      ],
+      "forbidden_dependencies": [
+        "oryvael-cli",
+        "oryvael-tool-broker"
+      ],
+      "capabilities_required": [],
+      "capabilities_exposed": [
+        "evidence.verify",
+        "evidence.derive"
       ]
     }
   ]
