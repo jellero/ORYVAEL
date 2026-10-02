@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use oryvael_audit::{AuditError, AuditLedger, AuditRecord};
+use oryvael_audit::{AuditError, JsonlAuditJournal};
 use oryvael_policy::evaluate;
 use oryvael_protocol::{AuditDecision, AuditEvent, Operation, Principal};
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -141,62 +141,6 @@ pub struct PreparedJob {
     artifact_store: PathBuf,
     read_only_paths: Vec<(PathBuf, PathBuf)>,
     runtime_dir: PathBuf,
-}
-
-struct AuditJournal {
-    path: PathBuf,
-    ledger: AuditLedger,
-    file: File,
-}
-
-impl AuditJournal {
-    fn open(path: &Path) -> Result<Self, SupervisorError> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let ledger = if path.exists() {
-            let file = File::open(path)?;
-            let reader = BufReader::new(file);
-            let mut records = Vec::new();
-
-            for (index, line) in reader.lines().enumerate() {
-                let line = line?;
-                if line.trim().is_empty() {
-                    continue;
-                }
-                let record: AuditRecord = serde_json::from_str(&line).map_err(|error| {
-                    SupervisorError::InvalidSpec(format!(
-                        "invalid audit JSON at line {}: {error}",
-                        index + 1
-                    ))
-                })?;
-                records.push(record);
-            }
-
-            let ledger = AuditLedger::from_records(records);
-            ledger.verify()?;
-            ledger
-        } else {
-            AuditLedger::new()
-        };
-
-        let file = OpenOptions::new().create(true).append(true).open(path)?;
-
-        Ok(Self {
-            path: path.to_path_buf(),
-            ledger,
-            file,
-        })
-    }
-
-    fn append(&mut self, event: AuditEvent) -> Result<AuditRecord, SupervisorError> {
-        let record = self.ledger.append(event)?.clone();
-        serde_json::to_writer(&mut self.file, &record)?;
-        self.file.write_all(b"\n")?;
-        self.file.sync_data()?;
-        Ok(record)
-    }
 }
 
 struct ArtifactStore {
@@ -341,7 +285,7 @@ fn run_job_with_context(
     }
 
     let prepared = prepare_job(&spec)?;
-    let mut audit = AuditJournal::open(&prepared.audit_log)?;
+    let mut audit = JsonlAuditJournal::open(&prepared.audit_log)?;
     let operation_id = new_operation_id();
 
     let mut start_metadata = BTreeMap::new();
@@ -531,12 +475,12 @@ fn run_job_with_context(
         exit_code: status.code(),
         stdout: stdout_ref,
         stderr: stderr_ref,
-        audit_log: audit.path,
+        audit_log: audit.path().to_path_buf(),
     })
 }
 
 fn authorize(
-    audit: &mut AuditJournal,
+    audit: &mut JsonlAuditJournal,
     principal: &Principal,
     change_id: &str,
     operation_id: &str,
