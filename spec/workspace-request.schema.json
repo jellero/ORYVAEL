@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/workspace-request.schema.json",
+  "title": "ORYVAEL Workspace Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["principal", "change_id", "change_plan", "repository_id", "base_ref", "audit_log"],
+  "properties": {
+    "principal": {"type": "string", "minLength": 1},
+    "change_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "change_plan": {"type": "string", "minLength": 1},
+    "repository_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "base_ref": {"type": "string", "minLength": 1},
+    "audit_log": {"type": "string", "minLength": 1}
+  }
+}
