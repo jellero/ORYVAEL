@@ -21,21 +21,13 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Check
-        run: cargo check --workspace --all-targets
-
-      - name: Export resolved Cargo lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lock
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+        run: cargo check --locked --workspace --all-targets
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Tests
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
 
       - name: Validate JSON schemas
         run: |
@@ -44,11 +36,11 @@ jobs:
           done
 
       - name: Validate architecture contract
-        run: cargo run -p oryvael-cli -- arch-check architecture/system.json
+        run: cargo run --locked -p oryvael-cli -- arch-check architecture/system.json
 
       - name: Build eligible C2 proof package
         run: |
-          cargo run -p oryvael-cli -- proof-build \
+          cargo run --locked -p oryvael-cli -- proof-build \
             --plan examples/proof/c2-plan.json \
             --evidence examples/proof/c2-evidence.json \
             > /tmp/oryvael-proof.json
@@ -82,7 +74,7 @@ jobs:
           PY
 
           set +e
-          cargo run -p oryvael-cli -- proof-build \
+          cargo run --locked -p oryvael-cli -- proof-build \
             --plan examples/proof/c2-plan.json \
             --evidence /tmp/oryvael-ineligible-evidence.json \
             > /tmp/oryvael-ineligible-proof.json
@@ -114,7 +106,7 @@ jobs:
           sudo apt-get install -y bubblewrap util-linux
 
       - name: Build ORYVAEL CLI
-        run: cargo build -p oryvael-cli
+        run: cargo build --locked -p oryvael-cli
 
       - name: Report rootless host capability
         run: |
