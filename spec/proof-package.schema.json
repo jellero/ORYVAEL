@@ -4,47 +4,120 @@
   "title": "ORYVAEL Proof Package",
   "type": "object",
   "additionalProperties": false,
-  "required": ["change_id", "change_class", "source", "verifiers", "artifacts", "eligible"],
+  "required": [
+    "change_id",
+    "change_class",
+    "source",
+    "verifiers",
+    "artifacts",
+    "eligible",
+    "eligibility_reasons"
+  ],
   "properties": {
-    "change_id": {"type": "string"},
-    "change_class": {"enum": ["C0", "C1", "C2", "C3", "C4"]},
+    "change_id": {
+      "type": "string"
+    },
+    "change_class": {
+      "enum": [
+        "C0",
+        "C1",
+        "C2",
+        "C3",
+        "C4"
+      ]
+    },
     "source": {
       "type": "object",
-      "required": ["repository", "commit"],
+      "required": [
+        "repository",
+        "commit"
+      ],
       "properties": {
-        "repository": {"type": "string"},
-        "commit": {"type": "string"},
-        "tree": {"type": ["string", "null"]}
-      }
+        "repository": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "tree": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
     },
     "verifiers": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "principal", "status", "evidence_hash"],
+        "required": [
+          "name",
+          "principal",
+          "status",
+          "evidence_hash",
+          "operation_id"
+        ],
         "properties": {
-          "name": {"type": "string"},
-          "principal": {"type": "string"},
-          "status": {"enum": ["pass", "fail", "skipped"]},
-          "evidence_hash": {"type": "string"}
-        }
+          "name": {
+            "type": "string"
+          },
+          "principal": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "skipped"
+            ]
+          },
+          "evidence_hash": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
       }
     },
     "artifacts": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "sha256"],
+        "required": [
+          "name",
+          "sha256"
+        ],
         "properties": {
-          "name": {"type": "string"},
-          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
-        }
+          "name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        },
+        "additionalProperties": false
       }
     },
-    "eligible": {"type": "boolean"},
+    "eligible": {
+      "type": "boolean"
+    },
     "human_approvals": {
       "type": "array",
-      "items": {"type": "string"}
+      "items": {
+        "type": "string"
+      }
+    },
+    "eligibility_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   }
 }
