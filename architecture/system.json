@@ -8,7 +8,11 @@
       "allowed_dependencies": [],
       "forbidden_dependencies": [],
       "capabilities_required": [],
-      "capabilities_exposed": ["process.isolation", "memory.virtual", "device.access"]
+      "capabilities_exposed": [
+        "process.isolation",
+        "memory.virtual",
+        "device.access"
+      ]
     },
     {
       "id": "oryvael-protocol",
@@ -17,34 +21,57 @@
       "allowed_dependencies": [],
       "forbidden_dependencies": [],
       "capabilities_required": [],
-      "capabilities_exposed": ["contracts.types"]
+      "capabilities_exposed": [
+        "contracts.types"
+      ]
     },
     {
       "id": "oryvael-policy",
       "layer": "trusted_core",
-      "dependencies": ["oryvael-protocol"],
-      "allowed_dependencies": ["oryvael-protocol"],
-      "forbidden_dependencies": ["oryvael-cli"],
+      "dependencies": [
+        "oryvael-protocol"
+      ],
+      "allowed_dependencies": [
+        "oryvael-protocol"
+      ],
+      "forbidden_dependencies": [
+        "oryvael-cli"
+      ],
       "capabilities_required": [],
-      "capabilities_exposed": ["policy.evaluate"]
+      "capabilities_exposed": [
+        "policy.evaluate"
+      ]
     },
     {
       "id": "oryvael-audit",
       "layer": "trusted_core",
-      "dependencies": ["oryvael-protocol"],
-      "allowed_dependencies": ["oryvael-protocol"],
-      "forbidden_dependencies": ["oryvael-cli"],
+      "dependencies": [
+        "oryvael-protocol"
+      ],
+      "allowed_dependencies": [
+        "oryvael-protocol"
+      ],
+      "forbidden_dependencies": [
+        "oryvael-cli"
+      ],
       "capabilities_required": [],
-      "capabilities_exposed": ["audit.append", "audit.verify"]
+      "capabilities_exposed": [
+        "audit.append",
+        "audit.verify"
+      ]
     },
     {
       "id": "oryvael-arch",
       "layer": "trusted_core",
       "dependencies": [],
       "allowed_dependencies": [],
-      "forbidden_dependencies": ["oryvael-cli"],
+      "forbidden_dependencies": [
+        "oryvael-cli"
+      ],
       "capabilities_required": [],
-      "capabilities_exposed": ["architecture.verify"]
+      "capabilities_exposed": [
+        "architecture.verify"
+      ]
     },
     {
       "id": "oryvael-supervisor",
@@ -61,13 +88,17 @@
         "oryvael-policy",
         "oryvael-audit"
       ],
-      "forbidden_dependencies": ["oryvael-cli"],
+      "forbidden_dependencies": [
+        "oryvael-cli"
+      ],
       "capabilities_required": [
         "process.isolation",
         "workspace.mount",
         "audit.append"
       ],
-      "capabilities_exposed": ["worker.supervise"]
+      "capabilities_exposed": [
+        "worker.supervise"
+      ]
     },
     {
       "id": "oryvael-cli",
@@ -77,18 +108,42 @@
         "oryvael-policy",
         "oryvael-audit",
         "oryvael-arch",
-        "oryvael-supervisor"
+        "oryvael-supervisor",
+        "oryvael-tool-broker"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
         "oryvael-policy",
         "oryvael-audit",
         "oryvael-arch",
-        "oryvael-supervisor"
+        "oryvael-supervisor",
+        "oryvael-tool-broker"
       ],
       "forbidden_dependencies": [],
       "capabilities_required": [],
-      "capabilities_exposed": ["operator.cli"]
+      "capabilities_exposed": [
+        "operator.cli"
+      ]
+    },
+    {
+      "id": "oryvael-tool-broker",
+      "layer": "system_service",
+      "dependencies": [
+        "oryvael-protocol",
+        "oryvael-supervisor"
+      ],
+      "allowed_dependencies": [
+        "oryvael-protocol",
+        "oryvael-supervisor"
+      ],
+      "forbidden_dependencies": [],
+      "capabilities_required": [
+        "tool.execute",
+        "change-plan.bind"
+      ],
+      "capabilities_exposed": [
+        "tool.invoke"
+      ]
     }
   ]
 }
