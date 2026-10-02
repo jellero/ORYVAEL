@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_protocol::{Operation, Principal};
-use oryvael_supervisor::run_from_files;
+use oryvael_supervisor::{host_status, run_from_files};
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
@@ -36,6 +36,7 @@ enum Command {
         #[arg(long)]
         job: String,
     },
+    SupervisorDoctor,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -87,6 +88,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{}", serde_json::to_string_pretty(&result)?);
             if !result.success {
                 process::exit(3);
+            }
+        }
+        Command::SupervisorDoctor => {
+            let status = host_status();
+            println!("{}", serde_json::to_string_pretty(&status)?);
+            if !status.ready_for_basic_sandbox {
+                process::exit(2);
             }
         }
     }
