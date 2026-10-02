@@ -8,6 +8,7 @@ members = [
   "crates/oryvael-supervisor",
   "crates/oryvael-tool-broker",
   "crates/oryvael-proof",
+  "crates/oryvael-workspace",
   "crates/oryvael-cli",
 ]
 
