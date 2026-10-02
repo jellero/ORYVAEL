@@ -375,6 +375,7 @@ name = "oryvael-proof"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "oryvael-build",
  "oryvael-evidence",
  "oryvael-protocol",
  "serde",
