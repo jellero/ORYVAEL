@@ -636,6 +636,7 @@ jobs:
       - name: Build release-grade audited C2 proof
         run: |
           printf 'ORYVAEL audited release artifact\n' > /tmp/audited-proof-demo.img
+          cp /tmp/audited-proof-demo.img /tmp/audited-proof-demo-independent.img
 
           operation_id="$(python - <<'PY'
           import json
@@ -682,6 +683,21 @@ jobs:
           with open("/tmp/oryvael-c2-build-input.json", "w", encoding="utf-8") as handle:
               json.dump(build_input, handle)
 
+          independent_build_input = dict(build_input)
+          independent_build_input["builder_principal"] = "build-service/independent"
+          independent_build_input["artifacts"] = [
+              {
+                  "name": "audited-proof-demo.img",
+                  "path": "/tmp/audited-proof-demo-independent.img",
+              }
+          ]
+          with open(
+              "/tmp/oryvael-c2-build-input-independent.json",
+              "w",
+              encoding="utf-8",
+          ) as handle:
+              json.dump(independent_build_input, handle)
+
           payload = {
               "source": {
                   "repository": "jellero/ORYVAEL",
@@ -701,6 +717,7 @@ jobs:
                   }
               ],
               "build_manifest_input": "/tmp/oryvael-c2-build-input.json",
+              "reproducible_build_input": "/tmp/oryvael-c2-build-input-independent.json",
               "human_approvals": [],
           }
 
@@ -727,6 +744,9 @@ jobs:
           assert len(proof["build"]["manifest_sha256"]) == 64
           assert len(proof["build"]["sbom_sha256"]) == 64
           assert len(proof["build"]["cargo_lock_sha256"]) == 64
+          assert proof["build"]["reproducible"] is True
+          assert proof["build"]["independent_builder"] == "build-service/independent"
+          assert len(proof["build"]["reproducible_manifest_sha256"]) == 64
 
           verifier = proof["verifiers"][0]
           assert verifier["name"] == "python.syntax-check"
@@ -734,6 +754,37 @@ jobs:
           assert verifier["status"] == "pass"
           assert len(verifier["evidence_hash"]) == 64
           PY
+
+      - name: Verify divergent independent build vetoes C2 proof
+        run: |
+          cp /tmp/oryvael-audited-proof-input.json             /tmp/oryvael-audited-proof-input-repro-fail.json
+          printf 'divergent independent artifact\n'             > /tmp/audited-proof-demo-independent.img
+
+          set +e
+          sudo ./target/debug/oryvael proof-build-audited             --plan examples/audited-proof/c2-plan.json             --input /tmp/oryvael-audited-proof-input-repro-fail.json             > /tmp/oryvael-audited-proof-repro-fail.json
+          status=$?
+          set -e
+          test "$status" -eq 4
+
+          python - <<'PY'
+          import json
+
+          with open(
+              "/tmp/oryvael-audited-proof-repro-fail.json",
+              "r",
+              encoding="utf-8",
+          ) as handle:
+              proof = json.load(handle)
+
+          assert proof["eligible"] is False
+          assert proof["build"]["reproducible"] is False
+          assert any(
+              "reproducible build" in reason or "independent build artifact" in reason
+              for reason in proof["eligibility_reasons"]
+          )
+          PY
+
+          cp /tmp/audited-proof-demo.img /tmp/audited-proof-demo-independent.img
 
       - name: Verify audited evidence cannot be replayed against modified plan
         run: |
