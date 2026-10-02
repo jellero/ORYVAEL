@@ -13,24 +13,19 @@
   },
   "target": "x86_64-unknown-linux-gnu",
   "profile": "release",
+  "build_command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "--workspace"
+  ],
+  "cargo_lock": "Cargo.lock",
+  "cargo_metadata": "/tmp/oryvael-build-metadata.json",
   "artifacts": [
     {
       "name": "oryvael-demo.img",
       "path": "/tmp/oryvael-demo-build/oryvael-demo.img"
-    }
-  ],
-  "dependencies": [
-    {
-      "name": "serde",
-      "version": "1",
-      "source": "registry:crates.io",
-      "checksum": null
-    },
-    {
-      "name": "sha2",
-      "version": "0.10",
-      "source": "registry:crates.io",
-      "checksum": null
     }
   ]
 }
