@@ -13,68 +13,86 @@ Fedora:
 
     sudo dnf install bubblewrap util-linux
 
-Build ORYVAEL:
+Build:
 
     cargo build --workspace
 
-Check host prerequisites:
-
-    cargo run -p oryvael-cli -- supervisor-doctor
-
-## Run the confinement demo
-
-Remove prior demo state if desired:
-
-    rm -rf /tmp/oryvael-demo-workspace /tmp/oryvael-demo-control
+## Check the host
 
 Run:
 
-    cargo run -p oryvael-cli -- supervise \
+    ./target/debug/oryvael supervisor-doctor
+
+The command reports Bubblewrap, unshare, prlimit and a real namespace probe.
+
+If ready_for_basic_sandbox is true, the host supports the rootless reference path.
+
+Some hardened distributions intentionally block unprivileged user namespaces. Do not disable AppArmor or weaken system policy merely to make the rootless probe pass. In the intended ORYVAEL OS model, a small trusted supervisor service creates the namespaces.
+
+For the current standalone prototype that service path can be exercised with:
+
+    sudo ./target/debug/oryvael supervisor-doctor
+
+## Run the confinement demo
+
+Clean prior demo state:
+
+    rm -rf /tmp/oryvael-demo-workspace /tmp/oryvael-demo-control
+
+If the rootless doctor passed:
+
+    ./target/debug/oryvael supervise \
+      --principal examples/supervisor/developer-principal.json \
+      --job examples/supervisor/job.json
+
+On a host where the rootless probe is blocked, exercise the trusted-service path:
+
+    sudo ./target/debug/oryvael supervise \
       --principal examples/supervisor/developer-principal.json \
       --job examples/supervisor/job.json
 
 Expected result:
 - generated.txt exists under /tmp/oryvael-demo-workspace;
-- writing /oryvael-escape from inside the worker fails;
-- network connection from the worker fails;
-- stdout and stderr are copied to the external content-addressed artifact store;
-- the external JSONL audit chain contains request, policy, start and exit events.
+- the sandbox root is read-only outside /workspace;
+- the test network connection is blocked;
+- stdout/stderr are copied to the external SHA-256 artifact store;
+- the external JSONL audit contains request, policy, start and exit events.
 
 Verify audit:
 
-    cargo run -p oryvael-cli -- audit-verify \
+    ./target/debug/oryvael audit-verify \
       /tmp/oryvael-demo-control/audit.jsonl
 
 ## Control-file rule
 
-Do not put the principal policy or job specification inside the job workspace.
+Never put the principal policy or job specification in the worker workspace.
 
-The supervisor rejects this configuration because an untrusted worker must not be able to rewrite the control inputs used for its next invocation.
+The supervisor rejects this arrangement before execution because the worker must not be able to rewrite the authority inputs used for a future run.
 
-## Granting read-only host data
+## Read-only host data
 
-Add the path to read_only_paths in the job and grant:
+Add a canonical host path to read_only_paths and grant:
 
     resource: host_path
     action: read
     scope: /exact/canonical/path
 
-The path is mounted read-only. A missing capability denies the job before Bubblewrap starts.
+Without the grant, the job is denied before sandbox launch.
 
-## Granting network
+## Host networking
 
 Network mode is deny by default.
 
-To share host networking, the job must set network to host and the principal must explicitly allow:
+To request host networking, the job must set network to host and the principal must independently contain an allow grant:
 
     resource: network
     action: connect
     scope: "*"
 
-ORYVAEL does not silently enable networking because a worker requests it.
+Changing only the job file does not create authority. The CI suite explicitly tests this negative case.
 
 ## Current boundary
 
-The supervisor isolates the worker and all of its child processes inside the same filesystem/network boundary. Phase 1 does not yet broker every child exec individually.
+The supervisor isolates the worker and its descendants inside one filesystem/network boundary.
 
-The next phase will put compiler, test runner, Git and other privileged development tools behind brokered tool capabilities.
+Phase 2 will add brokered compiler, test-runner, Git and other tool operations so child execution itself becomes capability-addressable and independently auditable.
