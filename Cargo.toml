@@ -10,6 +10,7 @@ members = [
   "crates/oryvael-proof",
   "crates/oryvael-workspace",
   "crates/oryvael-evidence",
+  "crates/oryvael-release",
   "crates/oryvael-cli",
 ]
 
