@@ -113,7 +113,12 @@ pub fn run_brokered_from_files(
     let catalog_path = canonical_file(catalog_path.as_ref())?;
     let change_plan_path = canonical_file(&invocation.change_plan)?;
 
-    for path in [&principal_path, &catalog_path, &invocation_path, &change_plan_path] {
+    for path in [
+        &principal_path,
+        &catalog_path,
+        &invocation_path,
+        &change_plan_path,
+    ] {
         if path.starts_with(&workspace) {
             return Err(ToolBrokerError::ControlFileInsideWorkspace(path.clone()));
         }
@@ -176,7 +181,11 @@ fn resolve_job(
                 return Err(ToolBrokerError::DeveloperProducerMismatch);
             }
             let requested = format!("tool:{action_id}");
-            if !plan.requested_capabilities.iter().any(|item| item == &requested) {
+            if !plan
+                .requested_capabilities
+                .iter()
+                .any(|item| item == &requested)
+            {
                 return Err(ToolBrokerError::ToolNotInRequestedCapabilities(requested));
             }
         }
@@ -196,13 +205,13 @@ fn resolve_job(
         .find(|tool| tool.id == invocation.tool)
         .ok_or_else(|| ToolBrokerError::UnknownTool(invocation.tool.clone()))?;
 
-    let action = tool
-        .actions
-        .get(&invocation.action)
-        .ok_or_else(|| ToolBrokerError::UnknownAction {
-            tool: invocation.tool.clone(),
-            action: invocation.action.clone(),
-        })?;
+    let action =
+        tool.actions
+            .get(&invocation.action)
+            .ok_or_else(|| ToolBrokerError::UnknownAction {
+                tool: invocation.tool.clone(),
+                action: invocation.action.clone(),
+            })?;
 
     if tool.executable.trim().is_empty() || !tool.executable.starts_with('/') {
         return Err(ToolBrokerError::InvalidTool(format!(
@@ -255,7 +264,9 @@ fn validate_catalog(catalog: &ToolCatalog) -> Result<(), ToolBrokerError> {
     let mut ids = BTreeSet::new();
     for tool in &catalog.tools {
         if tool.id.trim().is_empty() {
-            return Err(ToolBrokerError::InvalidTool("tool id must not be empty".into()));
+            return Err(ToolBrokerError::InvalidTool(
+                "tool id must not be empty".into(),
+            ));
         }
         if !ids.insert(tool.id.as_str()) {
             return Err(ToolBrokerError::DuplicateTool(tool.id.clone()));
