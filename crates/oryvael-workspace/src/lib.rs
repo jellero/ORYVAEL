@@ -368,12 +368,12 @@ fn validate_registry(registry: &WorkspaceRegistry) -> Result<(), WorkspaceError>
 }
 
 fn validate_branch(branch: &str) -> Result<(), WorkspaceError> {
-    let status = Command::new(GIT)
+    let output = Command::new(GIT)
         .args(["check-ref-format", "--branch"])
         .arg(branch)
-        .status()?;
+        .output()?;
 
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
         Err(WorkspaceError::UnsafeChangeId(branch.into()))
