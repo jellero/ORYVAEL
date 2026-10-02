@@ -13,6 +13,7 @@ const MANIFEST_VERSION: &str = "oryvael-build-manifest/2";
 const SBOM_FORMAT: &str = "oryvael-sbom/2";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct SourceIdentity {
     pub repository: String,
     pub commit: String,
@@ -21,6 +22,7 @@ pub struct SourceIdentity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ToolchainIdentity {
     pub name: String,
     pub version: String,
@@ -29,12 +31,14 @@ pub struct ToolchainIdentity {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactInput {
     pub name: String,
     pub path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct BuildManifestInput {
     pub change_id: String,
     pub builder_principal: String,
