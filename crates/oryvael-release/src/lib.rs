@@ -90,7 +90,8 @@ fn check(
     maximum_ring: RolloutRing,
 ) -> Result<ReleaseGateDecision, std::io::Error> {
     let artifact_sha256 = hash_file(artifact_path)?;
-    let proof_sha256 = sha256_hex(&serde_json::to_vec(proof).expect("proof package is serializable"));
+    let proof_sha256 =
+        sha256_hex(&serde_json::to_vec(proof).expect("proof package is serializable"));
     let mut reasons = Vec::new();
 
     if proof.change_id != plan.id {
