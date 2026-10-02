@@ -212,6 +212,143 @@ jobs:
           assert not missing, f"missing audit actions: {sorted(missing)}"
           PY
 
+      - name: Prepare Git workspace broker source repository
+        run: |
+          sudo rm -rf \
+            /tmp/oryvael-workspace-source \
+            /tmp/oryvael-worktrees \
+            /tmp/oryvael-workspace-control \
+            /tmp/oryvael-workspace-denied-control
+          sudo mkdir -p /tmp/oryvael-workspace-source
+          sudo git -C /tmp/oryvael-workspace-source init -b main
+          echo "workspace broker seed" | sudo tee /tmp/oryvael-workspace-source/README.md >/dev/null
+          sudo git -C /tmp/oryvael-workspace-source config user.email "oryvael-ci@example.invalid"
+          sudo git -C /tmp/oryvael-workspace-source config user.name "ORYVAEL CI"
+          sudo git -C /tmp/oryvael-workspace-source add README.md
+          sudo git -C /tmp/oryvael-workspace-source commit -m "seed workspace broker"
+
+      - name: Provision policy-bound Git worktree
+        run: |
+          sudo ./target/debug/oryvael workspace-create \
+            --principal examples/workspace/developer-principal.json \
+            --registry examples/workspace/registry.json \
+            --request examples/workspace/request.json \
+            > /tmp/oryvael-workspace-result.json
+
+      - name: Verify generated worktree branch and audit
+        run: |
+          target=/tmp/oryvael-worktrees/CHG-WORKSPACE-DEMO-001
+          test -d "$target"
+          test -f "$target/README.md"
+          test "$(sudo git -C "$target" branch --show-current)" = "oryvael/CHG-WORKSPACE-DEMO-001"
+
+          source_commit="$(sudo git -C /tmp/oryvael-workspace-source rev-parse HEAD)"
+          worktree_commit="$(sudo git -C "$target" rev-parse HEAD)"
+          test "$source_commit" = "$worktree_commit"
+
+          sudo ./target/debug/oryvael audit-verify \
+            /tmp/oryvael-workspace-control/audit.jsonl
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-workspace-result.json", "r", encoding="utf-8") as handle:
+              result = json.load(handle)
+
+          assert result["repository_id"] == "oryvael-demo"
+          assert result["workspace"] == "/tmp/oryvael-worktrees/CHG-WORKSPACE-DEMO-001"
+          assert result["branch"] == "oryvael/CHG-WORKSPACE-DEMO-001"
+          assert len(result["base_commit"]) >= 40
+
+          with open("/tmp/oryvael-workspace-control/audit.jsonl", "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          events = [record["event"] for record in records]
+          assert all(event.get("operation_id") for event in events)
+
+          allowed = {
+              (
+                  event["metadata"].get("resource"),
+                  event["metadata"].get("action"),
+                  event["target"],
+              )
+              for event in events
+              if event["action"] == "policy.evaluate"
+              and event["decision"] == "allowed"
+          }
+
+          assert ("repository", "read", "oryvael-demo") in allowed
+          assert (
+              "workspace",
+              "provision",
+              "/tmp/oryvael-worktrees/CHG-WORKSPACE-DEMO-001",
+          ) in allowed
+          assert (
+              "git_branch",
+              "create",
+              "oryvael/CHG-WORKSPACE-DEMO-001",
+          ) in allowed
+          PY
+
+      - name: Verify branch authority cannot be self-granted
+        run: |
+          python - <<'PY'
+          import json
+
+          with open("examples/workspace/developer-principal.json", "r", encoding="utf-8") as handle:
+              principal = json.load(handle)
+          principal["grants"] = [
+              grant for grant in principal["grants"]
+              if grant["resource"] != "git_branch"
+          ]
+          with open("/tmp/oryvael-workspace-no-branch-principal.json", "w", encoding="utf-8") as handle:
+              json.dump(principal, handle)
+
+          with open("examples/workspace/change-plan.json", "r", encoding="utf-8") as handle:
+              plan = json.load(handle)
+          plan["id"] = "CHG-WORKSPACE-DENIED-001"
+          with open("/tmp/oryvael-workspace-denied-plan.json", "w", encoding="utf-8") as handle:
+              json.dump(plan, handle)
+
+          with open("examples/workspace/request.json", "r", encoding="utf-8") as handle:
+              request = json.load(handle)
+          request["change_id"] = "CHG-WORKSPACE-DENIED-001"
+          request["change_plan"] = "/tmp/oryvael-workspace-denied-plan.json"
+          request["audit_log"] = "/tmp/oryvael-workspace-denied-control/audit.jsonl"
+          with open("/tmp/oryvael-workspace-denied-request.json", "w", encoding="utf-8") as handle:
+              json.dump(request, handle)
+          PY
+
+          set +e
+          sudo ./target/debug/oryvael workspace-create \
+            --principal /tmp/oryvael-workspace-no-branch-principal.json \
+            --registry examples/workspace/registry.json \
+            --request /tmp/oryvael-workspace-denied-request.json
+          status=$?
+          set -e
+
+          test "$status" -ne 0
+          test ! -e /tmp/oryvael-worktrees/CHG-WORKSPACE-DENIED-001
+
+          sudo ./target/debug/oryvael audit-verify \
+            /tmp/oryvael-workspace-denied-control/audit.jsonl
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-workspace-denied-control/audit.jsonl", "r", encoding="utf-8") as handle:
+              records = [json.loads(line) for line in handle if line.strip()]
+
+          denied = [
+              record["event"]
+              for record in records
+              if record["event"]["action"] == "policy.evaluate"
+              and record["event"]["decision"] == "denied"
+              and record["event"]["metadata"].get("resource") == "git_branch"
+          ]
+          assert denied, "expected git_branch.create denial"
+          PY
+
       - name: Prepare brokered development workspace
         run: |
           sudo rm -rf /tmp/oryvael-tool-demo-workspace /tmp/oryvael-tool-demo-control
