@@ -553,6 +553,96 @@ jobs:
           assert len(metadata.get("context.tool_invocation_sha256", "")) == 64
           PY
 
+      - name: Prepare brokered Rust toolchain workspace
+        run: |
+          sudo rm -rf \
+            /tmp/oryvael-rust-tool-workspace \
+            /tmp/oryvael-rust-dev-control \
+            /tmp/oryvael-rust-test-control \
+            /tmp/oryvael-rust-security-control
+
+          sudo mkdir -p /tmp/oryvael-rust-tool-workspace
+          sudo cp -R examples/rust-tool-broker/project/. /tmp/oryvael-rust-tool-workspace/
+
+          sudo mkdir -p /opt/oryvael/toolchains/rust
+          sudo mount --bind "$(rustc --print sysroot)" /opt/oryvael/toolchains/rust
+
+      - name: Run brokered Rust compiler and independent verifiers
+        run: |
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/rust-tool-broker/developer-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/rust-tool-broker/developer-invocation.json \
+            > /tmp/oryvael-rust-check-result.json
+
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/rust-tool-broker/test-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/rust-tool-broker/test-invocation.json \
+            > /tmp/oryvael-rust-test-result.json
+
+          sudo ./target/debug/oryvael tool-run \
+            --principal examples/rust-tool-broker/security-principal.json \
+            --catalog examples/tool-broker/catalog.json \
+            --invocation examples/rust-tool-broker/security-invocation.json \
+            > /tmp/oryvael-rust-fuzz-result.json
+
+      - name: Verify Rust broker audit and verifier evidence
+        run: |
+          test -d /tmp/oryvael-rust-tool-workspace/target/debug/deps
+
+          ./target/debug/oryvael audit-verify /tmp/oryvael-rust-dev-control/audit.jsonl
+          ./target/debug/oryvael audit-verify /tmp/oryvael-rust-test-control/audit.jsonl
+          ./target/debug/oryvael audit-verify /tmp/oryvael-rust-security-control/audit.jsonl
+
+          test_operation="$(python - <<'PY'
+          import json
+          with open("/tmp/oryvael-rust-test-result.json", "r", encoding="utf-8") as handle:
+              print(json.load(handle)["operation_id"])
+          PY
+          )"
+
+          fuzz_operation="$(python - <<'PY'
+          import json
+          with open("/tmp/oryvael-rust-fuzz-result.json", "r", encoding="utf-8") as handle:
+              print(json.load(handle)["operation_id"])
+          PY
+          )"
+
+          sudo ./target/debug/oryvael evidence-extract \
+            --audit /tmp/oryvael-rust-test-control/audit.jsonl \
+            --operation-id "$test_operation" \
+            > /tmp/oryvael-rust-test-evidence.json
+
+          sudo ./target/debug/oryvael evidence-extract \
+            --audit /tmp/oryvael-rust-security-control/audit.jsonl \
+            --operation-id "$fuzz_operation" \
+            > /tmp/oryvael-rust-fuzz-evidence.json
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-rust-test-evidence.json", "r", encoding="utf-8") as handle:
+              test = json.load(handle)
+          with open("/tmp/oryvael-rust-fuzz-evidence.json", "r", encoding="utf-8") as handle:
+              fuzz = json.load(handle)
+
+          assert test["change_id"] == "CHG-RUST-BROKER-001"
+          assert test["name"] == "rust.test"
+          assert test["principal"] == "test-ai/rust-demo"
+          assert test["role"] == "test"
+          assert test["status"] == "pass"
+
+          assert fuzz["change_id"] == "CHG-RUST-BROKER-001"
+          assert fuzz["name"] == "rust.fuzz-smoke"
+          assert fuzz["principal"] == "security-ai/rust-demo"
+          assert fuzz["role"] == "security"
+          assert fuzz["status"] == "pass"
+
+          assert test["principal"] != "developer-ai/rust-demo"
+          assert fuzz["principal"] != "developer-ai/rust-demo"
+          PY
+
       - name: Run independent Test AI verifier
         run: |
           sudo rm -rf /tmp/oryvael-tool-test-control

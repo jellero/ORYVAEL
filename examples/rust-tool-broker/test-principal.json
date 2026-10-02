@@ -1,0 +1,56 @@
+{
+  "principal": "test-ai/rust-demo",
+  "kind": "ai_agent",
+  "grants": [
+    {
+      "effect": "allow",
+      "resource": "workspace",
+      "actions": [
+        "mount_rw"
+      ],
+      "scope": "/workspace",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "process",
+      "actions": [
+        "execute"
+      ],
+      "scope": "/opt/oryvael/toolchains/rust/bin/cargo",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "tool",
+      "actions": [
+        "execute"
+      ],
+      "scope": "rust.test",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "allow",
+      "resource": "host_path",
+      "actions": [
+        "read"
+      ],
+      "scope": "/opt/oryvael/toolchains/rust/**",
+      "expires_at": null,
+      "delegable": false
+    },
+    {
+      "effect": "deny",
+      "resource": "network",
+      "actions": [
+        "*"
+      ],
+      "scope": null,
+      "expires_at": null,
+      "delegable": false
+    }
+  ]
+}

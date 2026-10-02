@@ -19,7 +19,7 @@ use thiserror::Error;
 static OP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 const SANDBOX_WORKSPACE: &str = "/workspace";
-const SAFE_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+const SAFE_PATH: &str = "/opt/oryvael/toolchains/rust/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]

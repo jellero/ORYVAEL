@@ -6,7 +6,11 @@
       "executable": "/usr/bin/python3",
       "actions": {
         "syntax-check": {
-          "argv": ["-m", "py_compile", "/workspace/src/demo.py"],
+          "argv": [
+            "-m",
+            "py_compile",
+            "/workspace/src/demo.py"
+          ],
           "network": "deny",
           "read_only_paths": [],
           "timeout_seconds": 10,
@@ -37,7 +41,10 @@
       "executable": "/usr/bin/git",
       "actions": {
         "status": {
-          "argv": ["status", "--short"],
+          "argv": [
+            "status",
+            "--short"
+          ],
           "network": "deny",
           "read_only_paths": [],
           "timeout_seconds": 10,
@@ -45,6 +52,69 @@
             "memory_bytes": 536870912,
             "cpu_seconds": 5,
             "file_size_bytes": 8388608
+          }
+        }
+      }
+    },
+    {
+      "id": "rust",
+      "executable": "/opt/oryvael/toolchains/rust/bin/cargo",
+      "actions": {
+        "check": {
+          "argv": [
+            "check",
+            "--locked",
+            "--offline",
+            "--all-targets"
+          ],
+          "network": "deny",
+          "read_only_paths": [
+            "/opt/oryvael/toolchains/rust"
+          ],
+          "timeout_seconds": 60,
+          "limits": {
+            "memory_bytes": 1073741824,
+            "cpu_seconds": 30,
+            "file_size_bytes": 67108864
+          }
+        },
+        "test": {
+          "argv": [
+            "test",
+            "--locked",
+            "--offline",
+            "--all-targets"
+          ],
+          "network": "deny",
+          "read_only_paths": [
+            "/opt/oryvael/toolchains/rust"
+          ],
+          "timeout_seconds": 60,
+          "limits": {
+            "memory_bytes": 1073741824,
+            "cpu_seconds": 30,
+            "file_size_bytes": 67108864
+          }
+        },
+        "fuzz-smoke": {
+          "argv": [
+            "test",
+            "--locked",
+            "--offline",
+            "--test",
+            "fuzz_smoke",
+            "--",
+            "--nocapture"
+          ],
+          "network": "deny",
+          "read_only_paths": [
+            "/opt/oryvael/toolchains/rust"
+          ],
+          "timeout_seconds": 60,
+          "limits": {
+            "memory_bytes": 1073741824,
+            "cpu_seconds": 30,
+            "file_size_bytes": 67108864
           }
         }
       }

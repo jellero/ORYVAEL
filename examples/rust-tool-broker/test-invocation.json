@@ -1,0 +1,11 @@
+{
+  "principal": "test-ai/rust-demo",
+  "role": "test",
+  "change_id": "CHG-RUST-BROKER-001",
+  "change_plan": "examples/rust-tool-broker/change-plan.json",
+  "workspace": "/tmp/oryvael-rust-tool-workspace",
+  "tool": "rust",
+  "action": "test",
+  "audit_log": "/tmp/oryvael-rust-test-control/audit.jsonl",
+  "artifact_store": "/tmp/oryvael-rust-test-control/artifacts"
+}

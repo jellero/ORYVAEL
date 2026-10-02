@@ -1,0 +1,23 @@
+{
+  "id": "CHG-RUST-BROKER-001",
+  "intent": "Compile and independently verify a Rust component through fixed broker profiles",
+  "class": "C2",
+  "producer": "developer-ai/rust-demo",
+  "components": [
+    "rust-broker-demo"
+  ],
+  "paths": [
+    "src/lib.rs",
+    "tests/fuzz_smoke.rs"
+  ],
+  "requested_capabilities": [
+    "tool:rust.check"
+  ],
+  "dependencies_added": [],
+  "verification": [
+    "rust.test",
+    "rust.fuzz-smoke"
+  ],
+  "max_rollout_ring": "none",
+  "rollback": "Delete the isolated Rust broker workspace"
+}

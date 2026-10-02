@@ -1,0 +1,11 @@
+{
+  "principal": "security-ai/rust-demo",
+  "role": "security",
+  "change_id": "CHG-RUST-BROKER-001",
+  "change_plan": "examples/rust-tool-broker/change-plan.json",
+  "workspace": "/tmp/oryvael-rust-tool-workspace",
+  "tool": "rust",
+  "action": "fuzz-smoke",
+  "audit_log": "/tmp/oryvael-rust-security-control/audit.jsonl",
+  "artifact_store": "/tmp/oryvael-rust-security-control/artifacts"
+}
