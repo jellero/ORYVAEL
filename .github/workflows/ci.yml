@@ -157,9 +157,9 @@ jobs:
 
       - name: Prepare brokered development workspace
         run: |
-          rm -rf /tmp/oryvael-tool-demo-workspace /tmp/oryvael-tool-demo-control
-          mkdir -p /tmp/oryvael-tool-demo-workspace
-          cp -R examples/tool-broker/workspace/. /tmp/oryvael-tool-demo-workspace/
+          sudo rm -rf /tmp/oryvael-tool-demo-workspace /tmp/oryvael-tool-demo-control
+          sudo mkdir -p /tmp/oryvael-tool-demo-workspace
+          sudo cp -R examples/tool-broker/workspace/. /tmp/oryvael-tool-demo-workspace/
 
       - name: Run capability-bound tool
         run: |
