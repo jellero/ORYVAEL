@@ -1,0 +1,15 @@
+[package]
+name = "oryvael-evidence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+oryvael-audit = { path = "../oryvael-audit" }
+oryvael-protocol = { path = "../oryvael-protocol" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+thiserror.workspace = true
