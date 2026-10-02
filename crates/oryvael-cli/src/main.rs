@@ -6,6 +6,7 @@ use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_protocol::{Operation, Principal};
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
+use oryvael_proof::build_from_files;
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
@@ -45,6 +46,12 @@ enum Command {
         catalog: String,
         #[arg(long)]
         invocation: String,
+    },
+    ProofBuild {
+        #[arg(long)]
+        plan: String,
+        #[arg(long)]
+        evidence: String,
     },
 }
 
@@ -115,6 +122,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{}", serde_json::to_string_pretty(&result)?);
             if !result.success {
                 process::exit(3);
+            }
+        }
+        Command::ProofBuild { plan, evidence } => {
+            let package = build_from_files(plan, evidence)?;
+            println!("{}", serde_json::to_string_pretty(&package)?);
+            if !package.eligible {
+                process::exit(4);
             }
         }
     }
