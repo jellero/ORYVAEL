@@ -115,19 +115,18 @@ Trusted reference components are written in Rust with unsafe code forbidden unle
 
 ## Current status
 
-Architecture foundation and trusted-core skeleton. This repository is not yet a bootable or production-secure OS.
+Phase 0 is implemented and the Phase 1 Local Trusted Supervisor is running as an alpha reference. CI now executes the real Linux sandbox and verifies workspace confinement, network denial, architecture policy and tamper-evident audit behavior. ORYVAEL is still not a bootable or production-secure OS.
 
 ## Immediate milestones
 
-1. Freeze Constitution v0.1.
-2. Stabilize capability and change-plan schemas.
-3. Build policy evaluation and tamper-evident audit.
-4. Build the Architecture Compiler.
-5. Add a local isolated AI supervisor.
-6. Produce proof packages for generated changes.
-7. Integrate metrics, logs and traces.
-8. Build an immutable Desktop developer image.
-9. Validate the same contracts on ARM64 Mobile.
+1. Build the Phase 2 Tool Broker for Git, compiler, tests and fuzzing.
+2. Bind every AI change to an immutable change plan.
+3. Generate proof packages from independent verifier results.
+4. Add reproducible build workers and SBOM generation.
+5. Add persistent supervisor/audit services and external audit checkpoints.
+6. Integrate metrics, logs and traces.
+7. Build an immutable Desktop developer image.
+8. Validate the same contracts on ARM64 Mobile.
 
 ## License
 
