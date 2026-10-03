@@ -9,6 +9,7 @@ license.workspace = true
 oryvael-protocol = { path = "../oryvael-protocol" }
 oryvael-evidence = { path = "../oryvael-evidence" }
 oryvael-build = { path = "../oryvael-build" }
+oryvael-control = { path = "../oryvael-control" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
