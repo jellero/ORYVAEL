@@ -6,9 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 use thiserror::Error;
 
 const APPROVAL_DOMAIN: &str = "ORYVAEL-RELEASE-APPROVAL-V1";
+const CONTROL_DOMAIN: &str = "ORYVAEL-CONTROL-ARTIFACT-V1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalContext {
@@ -66,6 +68,89 @@ pub struct ApprovalVerification {
     pub warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum ControlPurpose {
+    ToolCatalog,
+    PrincipalPolicy,
+    WorkspaceRegistry,
+    ArchitectureContract,
+}
+
+impl ControlPurpose {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ToolCatalog => "tool_catalog",
+            Self::PrincipalPolicy => "principal_policy",
+            Self::WorkspaceRegistry => "workspace_registry",
+            Self::ArchitectureContract => "architecture_contract",
+        }
+    }
+}
+
+impl FromStr for ControlPurpose {
+    type Err = ApprovalError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "tool_catalog" => Ok(Self::ToolCatalog),
+            "principal_policy" => Ok(Self::PrincipalPolicy),
+            "workspace_registry" => Ok(Self::WorkspaceRegistry),
+            "architecture_contract" => Ok(Self::ArchitectureContract),
+            other => Err(ApprovalError::InvalidControlPurpose(other.into())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ControlThreshold {
+    pub purpose: ControlPurpose,
+    pub required: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TrustedControlSigner {
+    pub id: String,
+    pub public_key_hex: String,
+    #[serde(default)]
+    pub allowed_purposes: Vec<ControlPurpose>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ControlTrustPolicy {
+    pub version: u32,
+    #[serde(default)]
+    pub thresholds: Vec<ControlThreshold>,
+    #[serde(default)]
+    pub signers: Vec<TrustedControlSigner>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ControlSignatureStatement {
+    pub version: u32,
+    pub signer_id: String,
+    pub purpose: ControlPurpose,
+    pub artifact_sha256: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ControlSignatureBundle {
+    #[serde(default)]
+    pub signatures: Vec<ControlSignatureStatement>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ControlVerification {
+    pub purpose: ControlPurpose,
+    pub artifact_sha256: String,
+    pub required: u32,
+    pub valid_signers: Vec<String>,
+    pub eligible: bool,
+    pub reasons: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
 #[derive(Debug, Error)]
 pub enum ApprovalError {
     #[error("I/O error: {0}")]
@@ -82,6 +167,10 @@ pub enum ApprovalError {
     InvalidSignatureLength(String),
     #[error("unsupported approval version: {0}")]
     UnsupportedVersion(u32),
+    #[error("invalid control artifact purpose: {0}")]
+    InvalidControlPurpose(String),
+    #[error("invalid control artifact SHA-256: {0}")]
+    InvalidControlArtifactHash(String),
 }
 
 pub fn public_key_from_private_file(
@@ -255,6 +344,178 @@ pub fn threshold_for(thresholds: &ApprovalThresholds, class: &ChangeClass) -> u3
     }
 }
 
+pub fn sign_control_hash_from_file(
+    private_key_path: impl AsRef<Path>,
+    signer_id: &str,
+    purpose: ControlPurpose,
+    artifact_sha256: &str,
+) -> Result<ControlSignatureStatement, ApprovalError> {
+    let signing_key = load_signing_key(private_key_path)?;
+    sign_control(&signing_key, signer_id, purpose, artifact_sha256)
+}
+
+pub fn sign_control(
+    signing_key: &SigningKey,
+    signer_id: &str,
+    purpose: ControlPurpose,
+    artifact_sha256: &str,
+) -> Result<ControlSignatureStatement, ApprovalError> {
+    require_sha256(artifact_sha256)?;
+    let payload = canonical_control_payload(signer_id, purpose, artifact_sha256);
+    let signature = signing_key.sign(&payload);
+
+    Ok(ControlSignatureStatement {
+        version: 1,
+        signer_id: signer_id.to_owned(),
+        purpose,
+        artifact_sha256: artifact_sha256.to_ascii_lowercase(),
+        signature_hex: hex::encode(signature.to_bytes()),
+    })
+}
+
+pub fn verify_control_from_files(
+    policy_path: impl AsRef<Path>,
+    bundle_path: impl AsRef<Path>,
+    purpose: ControlPurpose,
+    artifact_sha256: &str,
+) -> Result<ControlVerification, ApprovalError> {
+    let policy: ControlTrustPolicy =
+        serde_json::from_str(&fs::read_to_string(policy_path.as_ref())?)?;
+    let bundle: ControlSignatureBundle =
+        serde_json::from_str(&fs::read_to_string(bundle_path.as_ref())?)?;
+    verify_control(&policy, &bundle, purpose, artifact_sha256)
+}
+
+pub fn verify_control(
+    policy: &ControlTrustPolicy,
+    bundle: &ControlSignatureBundle,
+    purpose: ControlPurpose,
+    artifact_sha256: &str,
+) -> Result<ControlVerification, ApprovalError> {
+    if policy.version != 1 {
+        return Err(ApprovalError::UnsupportedVersion(policy.version));
+    }
+    require_sha256(artifact_sha256)?;
+    let artifact_sha256 = artifact_sha256.to_ascii_lowercase();
+
+    let required = policy
+        .thresholds
+        .iter()
+        .find(|threshold| threshold.purpose == purpose)
+        .map(|threshold| threshold.required)
+        .unwrap_or(0);
+
+    if required == 0 {
+        return Ok(ControlVerification {
+            purpose,
+            artifact_sha256,
+            required,
+            valid_signers: Vec::new(),
+            eligible: false,
+            reasons: vec![format!(
+                "control trust threshold for {} must be greater than zero",
+                purpose.as_str()
+            )],
+            warnings: Vec::new(),
+        });
+    }
+
+    let mut valid = BTreeSet::new();
+    let mut warnings = Vec::new();
+
+    for statement in &bundle.signatures {
+        if statement.version != 1 {
+            warnings.push(format!(
+                "control signature from {} uses unsupported version {}",
+                statement.signer_id, statement.version
+            ));
+            continue;
+        }
+        if statement.purpose != purpose {
+            warnings.push(format!(
+                "control signature from {} is bound to purpose {}",
+                statement.signer_id,
+                statement.purpose.as_str()
+            ));
+            continue;
+        }
+        if !statement.artifact_sha256.eq_ignore_ascii_case(&artifact_sha256) {
+            warnings.push(format!(
+                "control signature from {} is bound to a different artifact hash",
+                statement.signer_id
+            ));
+            continue;
+        }
+
+        let Some(signer) = policy
+            .signers
+            .iter()
+            .find(|signer| signer.id == statement.signer_id)
+        else {
+            warnings.push(format!(
+                "control signer {} is not in the root trust policy",
+                statement.signer_id
+            ));
+            continue;
+        };
+
+        if !signer.allowed_purposes.contains(&purpose) {
+            warnings.push(format!(
+                "control signer {} is not authorized for {}",
+                statement.signer_id,
+                purpose.as_str()
+            ));
+            continue;
+        }
+        if valid.contains(&statement.signer_id) {
+            warnings.push(format!(
+                "duplicate control signature from signer {} ignored",
+                statement.signer_id
+            ));
+            continue;
+        }
+
+        let public_bytes = decode_fixed::<32>(&signer.public_key_hex)
+            .map_err(|_| ApprovalError::InvalidPublicKey(signer.id.clone()))?;
+        let verifying_key = VerifyingKey::from_bytes(&public_bytes)
+            .map_err(|_| ApprovalError::InvalidPublicKey(signer.id.clone()))?;
+        let signature_bytes = decode_fixed::<64>(&statement.signature_hex)
+            .map_err(|_| ApprovalError::InvalidSignatureLength(signer.id.clone()))?;
+        let signature = Signature::from_bytes(&signature_bytes);
+        let payload = canonical_control_payload(&statement.signer_id, purpose, &artifact_sha256);
+
+        if verifying_key.verify(&payload, &signature).is_ok() {
+            valid.insert(statement.signer_id.clone());
+        } else {
+            warnings.push(format!(
+                "control signature verification failed for signer {}",
+                statement.signer_id
+            ));
+        }
+    }
+
+    let valid_signers = valid.into_iter().collect::<Vec<_>>();
+    let mut reasons = Vec::new();
+    if valid_signers.len() < required as usize {
+        reasons.push(format!(
+            "control signature threshold not met for {}: required {}, valid {}",
+            purpose.as_str(),
+            required,
+            valid_signers.len()
+        ));
+    }
+
+    Ok(ControlVerification {
+        purpose,
+        artifact_sha256,
+        required,
+        valid_signers,
+        eligible: reasons.is_empty(),
+        reasons,
+        warnings,
+    })
+}
+
 fn load_signing_key(path: impl AsRef<Path>) -> Result<SigningKey, ApprovalError> {
     let encoded = fs::read_to_string(path)?;
     let decoded = hex::decode(encoded.trim())
@@ -273,6 +534,14 @@ fn decode_fixed<const N: usize>(encoded: &str) -> Result<[u8; N], ApprovalError>
         .map_err(|_| ApprovalError::InvalidHex(format!("expected {N} bytes")))
 }
 
+fn require_sha256(value: &str) -> Result<(), ApprovalError> {
+    if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        Ok(())
+    } else {
+        Err(ApprovalError::InvalidControlArtifactHash(value.into()))
+    }
+}
+
 fn canonical_payload(signer_id: &str, context: &ApprovalContext) -> Vec<u8> {
     let class = match context.change_class {
         ChangeClass::C0 => "C0",
@@ -282,7 +551,7 @@ fn canonical_payload(signer_id: &str, context: &ApprovalContext) -> Vec<u8> {
         ChangeClass::C4 => "C4",
     };
 
-    let fields = [
+    length_prefixed_fields(&[
         APPROVAL_DOMAIN,
         signer_id,
         context.change_id.as_str(),
@@ -292,8 +561,24 @@ fn canonical_payload(signer_id: &str, context: &ApprovalContext) -> Vec<u8> {
         context.artifact_name.as_str(),
         context.artifact_sha256.as_str(),
         context.rollout_ring.as_str(),
-    ];
+    ])
+}
 
+fn canonical_control_payload(
+    signer_id: &str,
+    purpose: ControlPurpose,
+    artifact_sha256: &str,
+) -> Vec<u8> {
+    length_prefixed_fields(&[
+        CONTROL_DOMAIN,
+        "1",
+        purpose.as_str(),
+        signer_id,
+        artifact_sha256,
+    ])
+}
+
+fn length_prefixed_fields(fields: &[&str]) -> Vec<u8> {
     let mut payload = Vec::new();
     for field in fields {
         let bytes = field.as_bytes();
@@ -325,6 +610,20 @@ mod tests {
             id: id.into(),
             public_key_hex: hex::encode(key.verifying_key().to_bytes()),
             allowed_classes: classes,
+        };
+        (key, trusted)
+    }
+
+    fn control_signer(
+        seed: u8,
+        id: &str,
+        purposes: Vec<ControlPurpose>,
+    ) -> (SigningKey, TrustedControlSigner) {
+        let key = SigningKey::from_bytes(&[seed; 32]);
+        let trusted = TrustedControlSigner {
+            id: id.into(),
+            public_key_hex: hex::encode(key.verifying_key().to_bytes()),
+            allowed_purposes: purposes,
         };
         (key, trusted)
     }
@@ -422,5 +721,92 @@ mod tests {
 
         assert!(!result.eligible);
         assert_eq!(result.valid_signers.len(), 1);
+    }
+
+    #[test]
+    fn signed_tool_catalog_hash_is_accepted() {
+        let purpose = ControlPurpose::ToolCatalog;
+        let (key, trusted) = control_signer(17, "root/catalog", vec![purpose]);
+        let hash = "a".repeat(64);
+        let statement = sign_control(&key, "root/catalog", purpose, &hash).unwrap();
+        let policy = ControlTrustPolicy {
+            version: 1,
+            thresholds: vec![ControlThreshold {
+                purpose,
+                required: 1,
+            }],
+            signers: vec![trusted],
+        };
+
+        let result = verify_control(
+            &policy,
+            &ControlSignatureBundle {
+                signatures: vec![statement],
+            },
+            purpose,
+            &hash,
+        )
+        .unwrap();
+
+        assert!(result.eligible);
+        assert_eq!(result.valid_signers, vec!["root/catalog"]);
+    }
+
+    #[test]
+    fn control_signature_cannot_be_replayed_for_other_hash_or_purpose() {
+        let tool_catalog = ControlPurpose::ToolCatalog;
+        let principal_policy = ControlPurpose::PrincipalPolicy;
+        let (key, trusted) = control_signer(
+            19,
+            "root/control",
+            vec![tool_catalog, principal_policy],
+        );
+        let hash = "b".repeat(64);
+        let statement = sign_control(&key, "root/control", tool_catalog, &hash).unwrap();
+        let policy = ControlTrustPolicy {
+            version: 1,
+            thresholds: vec![
+                ControlThreshold {
+                    purpose: tool_catalog,
+                    required: 1,
+                },
+                ControlThreshold {
+                    purpose: principal_policy,
+                    required: 1,
+                },
+            ],
+            signers: vec![trusted],
+        };
+        let bundle = ControlSignatureBundle {
+            signatures: vec![statement],
+        };
+
+        assert!(
+            !verify_control(&policy, &bundle, tool_catalog, &"c".repeat(64))
+                .unwrap()
+                .eligible
+        );
+        assert!(
+            !verify_control(&policy, &bundle, principal_policy, &hash)
+                .unwrap()
+                .eligible
+        );
+    }
+
+    #[test]
+    fn control_threshold_is_fail_closed() {
+        let result = verify_control(
+            &ControlTrustPolicy {
+                version: 1,
+                thresholds: vec![],
+                signers: vec![],
+            },
+            &ControlSignatureBundle::default(),
+            ControlPurpose::ToolCatalog,
+            &"d".repeat(64),
+        )
+        .unwrap();
+        assert!(!result.eligible);
+        assert_eq!(result.required, 0);
     }
 }
