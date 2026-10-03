@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 oryvael-protocol = { path = "../oryvael-protocol" }
 oryvael-supervisor = { path = "../oryvael-supervisor" }
+oryvael-control = { path = "../oryvael-control" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
