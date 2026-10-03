@@ -61,6 +61,8 @@ pub struct ToolInvocation {
     pub role: ToolRole,
     pub change_id: String,
     pub change_plan: PathBuf,
+    pub catalog_trust_policy: PathBuf,
+    pub catalog_signature_bundle: PathBuf,
     pub workspace: PathBuf,
     pub tool: String,
     pub action: String,
@@ -107,8 +109,6 @@ pub enum ToolBrokerError {
 pub fn run_brokered_from_files(
     principal_path: impl AsRef<Path>,
     catalog_path: impl AsRef<Path>,
-    catalog_trust_policy_path: impl AsRef<Path>,
-    catalog_signature_bundle_path: impl AsRef<Path>,
     invocation_path: impl AsRef<Path>,
 ) -> Result<JobResult, ToolBrokerError> {
     let invocation_path = canonical_file(invocation_path.as_ref())?;
@@ -121,8 +121,8 @@ pub fn run_brokered_from_files(
 
     let principal_path = canonical_file(principal_path.as_ref())?;
     let catalog_path = canonical_file(catalog_path.as_ref())?;
-    let catalog_trust_policy_path = canonical_file(catalog_trust_policy_path.as_ref())?;
-    let catalog_signature_bundle_path = canonical_file(catalog_signature_bundle_path.as_ref())?;
+    let catalog_trust_policy_path = canonical_file(&invocation.catalog_trust_policy)?;
+    let catalog_signature_bundle_path = canonical_file(&invocation.catalog_signature_bundle)?;
     let change_plan_path = canonical_file(&invocation.change_plan)?;
 
     for path in [
@@ -443,6 +443,8 @@ mod tests {
             role,
             change_id: "CHG-TOOL-1".into(),
             change_plan: "plan.json".into(),
+            catalog_trust_policy: "catalog-trust-policy.json".into(),
+            catalog_signature_bundle: "catalog-signatures.json".into(),
             workspace: "/tmp/workspace".into(),
             tool: "python".into(),
             action: "syntax-check".into(),
