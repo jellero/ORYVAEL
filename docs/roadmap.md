@@ -67,6 +67,9 @@ Delivered foundation:
 - ephemeral CI roots with no committed private root key;
 - root-control enforcement at public file-based crate boundaries for supervisor, workspace, tool broker, build and proof;
 - direct-crate anti-bypass integration tests requiring unsigned privileged controls to fail closed;
+- verified-byte pinning for privileged control artifacts: protected files are read and verified once, then the same authenticated bytes are materialized into private read-only snapshots consumed by the privileged implementation;
+- nested proof-to-build control verification operates on the pinned signed snapshot rather than re-opening the original mutable control pathname;
+- source-replacement test proving a verified token retains the authenticated bytes after the original pathname is modified;
 - immutable change-plan hash binding for brokered execution and verifier evidence;
 - developer actions must be explicitly requested by the plan;
 - Test/Security/Reviewer roles must differ from the producer;
@@ -85,8 +88,8 @@ Delivered foundation:
 - cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- eliminate control-artifact TOCTOU by consuming exact verified bytes or pinned immutable handles instead of re-opening mutable paths;
 - move root-policy loading and epoch persistence into persistent trusted services;
+- evaluate sealed `memfd`/kernel-handle backed control transport as defense in depth beyond the current private read-only snapshot model;
 - evaluate TPM/secure-element backed monotonic epoch storage and root-key recovery procedures;
 - evaluate threshold/multi-party authorization for root-policy and highly privileged catalog changes;
 - replace the bounded fuzz-smoke profile with a coverage-guided fuzz backend while preserving broker isolation;
