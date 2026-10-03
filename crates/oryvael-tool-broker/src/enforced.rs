@@ -6,6 +6,7 @@ mod inner;
 pub use inner::*;
 
 use oryvael_control::{ControlError, ControlKind, verify_from_env};
+use oryvael_supervisor::JobResult;
 use std::fs;
 use std::io;
 use std::path::Path;
