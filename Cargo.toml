@@ -5,6 +5,7 @@ members = [
   "crates/oryvael-policy",
   "crates/oryvael-audit",
   "crates/oryvael-arch",
+  "crates/oryvael-control",
   "crates/oryvael-supervisor",
   "crates/oryvael-tool-broker",
   "crates/oryvael-proof",
