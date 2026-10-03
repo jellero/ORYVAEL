@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "thresholds": [
+    {
+      "purpose": "tool_catalog",
+      "required": 1
+    }
+  ],
+  "signers": [
+    {
+      "id": "test-root/tool-catalog",
+      "public_key_hex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+      "allowed_purposes": [
+        "tool_catalog"
+      ]
+    }
+  ]
+}
