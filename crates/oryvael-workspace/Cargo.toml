@@ -9,6 +9,7 @@ license.workspace = true
 oryvael-protocol = { path = "../oryvael-protocol" }
 oryvael-policy = { path = "../oryvael-policy" }
 oryvael-audit = { path = "../oryvael-audit" }
+oryvael-control = { path = "../oryvael-control" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
