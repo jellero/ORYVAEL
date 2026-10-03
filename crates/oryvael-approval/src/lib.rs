@@ -439,7 +439,10 @@ pub fn verify_control(
             ));
             continue;
         }
-        if !statement.artifact_sha256.eq_ignore_ascii_case(&artifact_sha256) {
+        if !statement
+            .artifact_sha256
+            .eq_ignore_ascii_case(&artifact_sha256)
+        {
             warnings.push(format!(
                 "control signature from {} is bound to a different artifact hash",
                 statement.signer_id
@@ -756,11 +759,8 @@ mod tests {
     fn control_signature_cannot_be_replayed_for_other_hash_or_purpose() {
         let tool_catalog = ControlPurpose::ToolCatalog;
         let principal_policy = ControlPurpose::PrincipalPolicy;
-        let (key, trusted) = control_signer(
-            19,
-            "root/control",
-            vec![tool_catalog, principal_policy],
-        );
+        let (key, trusted) =
+            control_signer(19, "root/control", vec![tool_catalog, principal_policy]);
         let hash = "b".repeat(64);
         let statement = sign_control(&key, "root/control", tool_catalog, &hash).unwrap();
         let policy = ControlTrustPolicy {
