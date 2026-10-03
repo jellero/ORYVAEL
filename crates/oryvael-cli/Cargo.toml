@@ -14,6 +14,7 @@ oryvael-protocol = { path = "../oryvael-protocol" }
 oryvael-policy = { path = "../oryvael-policy" }
 oryvael-audit = { path = "../oryvael-audit" }
 oryvael-arch = { path = "../oryvael-arch" }
+oryvael-control = { path = "../oryvael-control" }
 oryvael-supervisor = { path = "../oryvael-supervisor" }
 oryvael-tool-broker = { path = "../oryvael-tool-broker" }
 oryvael-proof = { path = "../oryvael-proof" }
