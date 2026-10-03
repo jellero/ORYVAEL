@@ -76,10 +76,8 @@ fn direct_file_based_crate_apis_fail_closed() {
         ),
     );
 
-    let unsigned_build_plan = unsigned_copy(
-        &root.join("examples/build/c1-plan.json"),
-        "build-plan",
-    );
+    let unsigned_build_plan =
+        unsigned_copy(&root.join("examples/build/c1-plan.json"), "build-plan");
     assert_control_rejected(
         "build",
         oryvael_build::build_from_files(
@@ -88,10 +86,8 @@ fn direct_file_based_crate_apis_fail_closed() {
         ),
     );
 
-    let unsigned_proof_plan = unsigned_copy(
-        &root.join("examples/proof/c2-plan.json"),
-        "proof-plan",
-    );
+    let unsigned_proof_plan =
+        unsigned_copy(&root.join("examples/proof/c2-plan.json"), "proof-plan");
     assert_control_rejected(
         "proof",
         oryvael_proof::build_from_files(
