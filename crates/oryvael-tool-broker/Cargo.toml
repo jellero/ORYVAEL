@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+oryvael-approval = { path = "../oryvael-approval" }
 oryvael-protocol = { path = "../oryvael-protocol" }
 oryvael-supervisor = { path = "../oryvael-supervisor" }
 serde.workspace = true
