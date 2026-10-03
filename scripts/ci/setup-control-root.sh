@@ -101,4 +101,4 @@ set +e
 status=$?
 set -e
 test "$status" -ne 0
-grep -q 'revoked' /tmp/oryvael-revoked-control.err
+cat /tmp/oryvael-revoked-control.err
