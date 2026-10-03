@@ -19,9 +19,7 @@ pub fn build_from_files(
     let evidence_path = canonical_input_file(evidence_path.as_ref())?;
     let evidence_bytes = fs::read(&evidence_path)?;
 
-    let plan_snapshot = plan
-        .pin_snapshot("proof-plan")
-        .map_err(control_failure)?;
+    let plan_snapshot = plan.pin_snapshot("proof-plan").map_err(control_failure)?;
     let evidence_snapshot = pin_bytes(
         "proof-evidence",
         file_name(&evidence_path, "evidence.json"),

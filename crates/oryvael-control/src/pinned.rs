@@ -184,18 +184,18 @@ pub fn load_verified_from_files(
             key_version: signer.key_version,
         }
     })?;
-    let verifying_key = VerifyingKey::from_bytes(&public_bytes).map_err(|_| {
-        ControlError::InvalidPublicKey {
+    let verifying_key =
+        VerifyingKey::from_bytes(&public_bytes).map_err(|_| ControlError::InvalidPublicKey {
             id: signer.id.clone(),
             key_version: signer.key_version,
-        }
-    })?;
-    let signature_bytes_raw = decode_fixed_pinned::<64>(&statement.signature_hex).map_err(|_| {
-        ControlError::InvalidSignatureLength {
-            id: signer.id.clone(),
-            key_version: signer.key_version,
-        }
-    })?;
+        })?;
+    let signature_bytes_raw =
+        decode_fixed_pinned::<64>(&statement.signature_hex).map_err(|_| {
+            ControlError::InvalidSignatureLength {
+                id: signer.id.clone(),
+                key_version: signer.key_version,
+            }
+        })?;
     let signature = Signature::from_bytes(&signature_bytes_raw);
     let payload = signature_payload_pinned(
         statement.kind,
@@ -231,11 +231,7 @@ pub fn load_verified_from_files(
     })
 }
 
-pub fn pin_bytes(
-    label: &str,
-    file_name: &str,
-    bytes: &[u8],
-) -> Result<PinnedFile, ControlError> {
+pub fn pin_bytes(label: &str, file_name: &str, bytes: &[u8]) -> Result<PinnedFile, ControlError> {
     pin_snapshot(label, file_name, bytes, &[])
 }
 
@@ -296,10 +292,7 @@ fn create_snapshot_directory(label: &str) -> Result<PathBuf, ControlError> {
 }
 
 fn write_snapshot_file(path: &Path, bytes: &[u8]) -> Result<(), ControlError> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     file.write_all(bytes)?;
     file.sync_all()?;
     #[cfg(unix)]
@@ -480,6 +473,9 @@ mod pinned_tests {
         assert_eq!(fs::read(pinned.path()).expect("pinned bytes"), original);
         let pinned_verified = verify_from_files(pinned.path(), &root, ControlKind::ChangePlan)
             .expect("pinned snapshot verifies");
-        assert_eq!(pinned_verified.artifact_sha256, verified.verified().artifact_sha256);
+        assert_eq!(
+            pinned_verified.artifact_sha256,
+            verified.verified().artifact_sha256
+        );
     }
 }

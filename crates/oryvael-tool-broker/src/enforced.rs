@@ -5,9 +5,7 @@ mod inner;
 
 pub use inner::*;
 
-use oryvael_control::{
-    ControlError, ControlKind, SnapshotFile, load_verified_from_env, pin_bytes,
-};
+use oryvael_control::{ControlError, ControlKind, SnapshotFile, load_verified_from_env, pin_bytes};
 use oryvael_supervisor::JobResult;
 use std::fs;
 use std::io;
@@ -78,9 +76,7 @@ pub fn run_brokered_from_files(
             ],
         )
         .map_err(control_failure)?;
-    let plan_snapshot = plan
-        .pin_snapshot("tool-plan")
-        .map_err(control_failure)?;
+    let plan_snapshot = plan.pin_snapshot("tool-plan").map_err(control_failure)?;
 
     invocation.change_plan = plan_snapshot.path().to_path_buf();
     let normalized_invocation = serde_json::to_vec(&invocation)?;

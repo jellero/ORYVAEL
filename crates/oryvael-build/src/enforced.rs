@@ -19,9 +19,7 @@ pub fn build_from_files(
     let input_path = canonical_input_file(input_path.as_ref())?;
     let input_bytes = fs::read(&input_path)?;
 
-    let plan_snapshot = plan
-        .pin_snapshot("build-plan")
-        .map_err(control_failure)?;
+    let plan_snapshot = plan.pin_snapshot("build-plan").map_err(control_failure)?;
     let input_snapshot = pin_bytes(
         "build-input",
         file_name(&input_path, "build-input.json"),
