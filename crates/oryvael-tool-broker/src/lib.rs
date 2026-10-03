@@ -295,10 +295,7 @@ fn resolve_job(
         "tool_catalog_signature_bundle_sha256".into(),
         hashes.catalog_signature_bundle,
     );
-    audit_context.insert(
-        "tool_catalog_signature_verified".into(),
-        "true".into(),
-    );
+    audit_context.insert("tool_catalog_signature_verified".into(), "true".into());
     audit_context.insert(
         "tool_catalog_signature_signers".into(),
         hashes.catalog_signature_signers,
@@ -540,8 +537,10 @@ mod tests {
 
         let mut mutated = catalog.to_owned();
         mutated.push(' ');
-        assert!(!verify_catalog_trust(&mutated, policy, bundle)
-            .unwrap()
-            .eligible);
+        assert!(
+            !verify_catalog_trust(&mutated, policy, bundle)
+                .unwrap()
+                .eligible
+        );
     }
 }
