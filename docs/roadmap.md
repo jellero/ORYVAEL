@@ -57,6 +57,10 @@ Status: implementation in progress; the reference development-factory path is op
 
 Delivered foundation:
 - named tool/action catalog with no arbitrary command surface;
+- Ed25519-signed tool catalogs verified fail-closed against an external trust policy;
+- exact catalog-byte SHA-256 binding inside the signed statement;
+- catalog signer, trust-policy hash and signature-statement hash recorded in audit context;
+- tampered catalog bytes rejected before tool resolution or sandbox launch;
 - immutable change-plan hash binding for brokered execution and verifier evidence;
 - developer actions must be explicitly requested by the plan;
 - Test/Security/Reviewer roles must differ from the producer;
@@ -75,7 +79,9 @@ Delivered foundation:
 - cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- sign tool catalogs and other privileged control artifacts from a trusted provenance/root policy;
+- extend signed-root provenance to the remaining privileged control artifacts;
+- define catalog-key provisioning, rotation, revocation and recovery procedures;
+- evaluate threshold/multi-party authorization for highly privileged catalogs;
 - replace the bounded fuzz-smoke profile with a coverage-guided fuzz backend while preserving broker isolation;
 - complete concrete Architect and Reviewer workflows around the existing role enforcement;
 - persistent supervisor/audit services with external checkpoints;
