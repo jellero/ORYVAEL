@@ -12,7 +12,7 @@ It currently protects four artifact classes:
 - `principal_policy`;
 - `workspace_registry`.
 
-The official Trusted Core CLI verifies these artifacts before entering privileged supervisor, workspace, tool, build, proof or release flows.
+The public file-based entrypoints for supervisor, workspace, tool broker, build and proof enforce root-control verification inside their crate boundary. The Trusted Core CLI retains its own checks as defense in depth.
 
 ## System trust anchor
 
@@ -96,6 +96,14 @@ Privileged execution rejects:
 
 There is no score or warning path for these failures.
 
+## Direct crate boundary
+
+The public file-based APIs of `oryvael-supervisor`, `oryvael-workspace`, `oryvael-tool-broker`, `oryvael-build` and `oryvael-proof` now use enforced crate roots. Their historical implementations are loaded as private modules, while the public front-door functions perform control verification before entering privileged logic.
+
+An external Rust consumer therefore cannot select the historical unchecked file entrypoint by linking the crate directly.
+
+The Trusted Core CLI still performs its own verification. These duplicate checks are intentional defense in depth rather than the security boundary.
+
 ## CI evidence
 
 CI creates ephemeral Ed25519 roots and commits no private root key.
@@ -108,8 +116,12 @@ The integration path installs:
 
 It signs the static control fixtures, signs dynamically modified negative-test fixtures when those fixtures are intentionally authorized, and verifies that a valid signature from the revoked v1 key is still rejected.
 
-## Current boundary and next hardening
+The `direct_crate_control` integration test bypasses the CLI intentionally and calls the supervisor, workspace, tool-broker, build and proof crates directly with unsigned privileged control artifacts. Every public file-based API must fail closed with a control-verification error.
 
-The operational reference path is fail-closed at the Trusted CLI boundary and the control verifier is a Trusted Core crate available to supervisor/build/proof/workspace/tool components.
+## Remaining hardening
 
-The next hardening step is to invoke the verifier inside every file-based crate API as well, so embedding a library directly cannot bypass the same root policy. Persistent supervisor/audit services should then own root-policy loading, epoch persistence and verification telemetry rather than relying on per-process file reads.
+The direct crate-API bypass is closed, but the current wrapper architecture still has a narrower time-of-check/time-of-use boundary: a protected path is verified and the private legacy implementation subsequently re-opens that path for parsing. A sufficiently privileged concurrent local writer could attempt to replace bytes between those operations.
+
+The next hardening step is therefore verified-byte or pinned-handle consumption: read the protected artifact once, verify exactly those bytes, and pass the verified bytes, parsed value or immutable file handle through the privileged pipeline without re-opening a mutable pathname.
+
+Persistent supervisor/audit services should subsequently own root-policy loading, monotonic epoch persistence and verification telemetry rather than relying on per-process file reads.

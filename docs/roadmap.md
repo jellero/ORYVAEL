@@ -65,6 +65,8 @@ Delivered foundation:
 - monotonic root-policy epoch with anti-rollback minimum state;
 - system root defaults at `/etc/oryvael/root-policy.json` and `/etc/oryvael/root-policy.min-epoch`;
 - ephemeral CI roots with no committed private root key;
+- root-control enforcement at public file-based crate boundaries for supervisor, workspace, tool broker, build and proof;
+- direct-crate anti-bypass integration tests requiring unsigned privileged controls to fail closed;
 - immutable change-plan hash binding for brokered execution and verifier evidence;
 - developer actions must be explicitly requested by the plan;
 - Test/Security/Reviewer roles must differ from the producer;
@@ -83,7 +85,7 @@ Delivered foundation:
 - cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- invoke root-control verification inside every file-based crate API, not only the official Trusted CLI boundary;
+- eliminate control-artifact TOCTOU by consuming exact verified bytes or pinned immutable handles instead of re-opening mutable paths;
 - move root-policy loading and epoch persistence into persistent trusted services;
 - evaluate TPM/secure-element backed monotonic epoch storage and root-key recovery procedures;
 - evaluate threshold/multi-party authorization for root-policy and highly privileged catalog changes;
