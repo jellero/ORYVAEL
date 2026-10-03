@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use oryvael_protocol::{ChangePlan, Operation, Principal};
 use oryvael_supervisor::{
     JobResult, JobSpec, NetworkMode, ResourceLimits, SupervisorError, run_job,
@@ -11,13 +12,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
+const CATALOG_SIGNATURE_DOMAIN: &[u8] = b"ORYVAEL-TOOL-CATALOG-V1";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ToolCatalog {
     pub version: String,
     pub tools: Vec<ToolDefinition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ToolDefinition {
     pub id: String,
     pub executable: String,
@@ -25,6 +30,7 @@ pub struct ToolDefinition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ToolAction {
     #[serde(default)]
     pub argv: Vec<String>,
@@ -52,6 +58,7 @@ pub enum ToolRole {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ToolInvocation {
     pub principal: String,
     pub role: ToolRole,
@@ -62,6 +69,37 @@ pub struct ToolInvocation {
     pub action: String,
     pub audit_log: PathBuf,
     pub artifact_store: PathBuf,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogTrustPolicy {
+    pub version: u32,
+    #[serde(default)]
+    pub signers: Vec<CatalogTrustedSigner>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogTrustedSigner {
+    pub id: String,
+    pub public_key_hex: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogSignature {
+    pub version: u32,
+    pub signer_id: String,
+    pub catalog_sha256: String,
+    pub signature_hex: String,
+}
+
+#[derive(Debug, Clone)]
+struct VerifiedCatalogControl {
+    signer_id: String,
+    trust_policy_sha256: String,
+    signature_sha256: String,
 }
 
 #[derive(Debug, Error)]
@@ -88,6 +126,22 @@ pub enum ToolBrokerError {
     DuplicateTool(String),
     #[error("invalid tool definition: {0}")]
     InvalidTool(String),
+    #[error("catalog trust policy version {0} is unsupported")]
+    UnsupportedCatalogTrustVersion(u32),
+    #[error("catalog signature version {0} is unsupported")]
+    UnsupportedCatalogSignatureVersion(u32),
+    #[error("catalog signer is not trusted: {0}")]
+    UntrustedCatalogSigner(String),
+    #[error("catalog signer public key is invalid: {0}")]
+    InvalidCatalogPublicKey(String),
+    #[error("catalog signature has invalid length for signer {0}")]
+    InvalidCatalogSignatureLength(String),
+    #[error("catalog hash mismatch: signature binds {signed}, actual catalog is {actual}")]
+    CatalogHashMismatch { signed: String, actual: String },
+    #[error("catalog signature verification failed for signer {0}")]
+    CatalogSignatureInvalid(String),
+    #[error("catalog trust policy contains duplicate signer id {0}")]
+    DuplicateCatalogSigner(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
@@ -111,11 +165,15 @@ pub fn run_brokered_from_files(
 
     let principal_path = canonical_file(principal_path.as_ref())?;
     let catalog_path = canonical_file(catalog_path.as_ref())?;
+    let trust_policy_path = canonical_file(&catalog_sidecar_path(&catalog_path, "trust"))?;
+    let signature_path = canonical_file(&catalog_sidecar_path(&catalog_path, "signature"))?;
     let change_plan_path = canonical_file(&invocation.change_plan)?;
 
     for path in [
         &principal_path,
         &catalog_path,
+        &trust_policy_path,
+        &signature_path,
         &invocation_path,
         &change_plan_path,
     ] {
@@ -126,11 +184,23 @@ pub fn run_brokered_from_files(
 
     let principal_content = fs::read_to_string(&principal_path)?;
     let catalog_content = fs::read_to_string(&catalog_path)?;
+    let trust_policy_content = fs::read_to_string(&trust_policy_path)?;
+    let signature_content = fs::read_to_string(&signature_path)?;
     let plan_content = fs::read_to_string(&change_plan_path)?;
 
     let principal: Principal = serde_json::from_str(&principal_content)?;
     let catalog: ToolCatalog = serde_json::from_str(&catalog_content)?;
+    let trust_policy: CatalogTrustPolicy = serde_json::from_str(&trust_policy_content)?;
+    let signature: CatalogSignature = serde_json::from_str(&signature_content)?;
     let plan: ChangePlan = serde_json::from_str(&plan_content)?;
+
+    let catalog_control = verify_catalog_signature(
+        catalog_content.as_bytes(),
+        trust_policy_content.as_bytes(),
+        signature_content.as_bytes(),
+        &trust_policy,
+        &signature,
+    )?;
 
     let hashes = InputHashes {
         principal: sha256_hex(principal_content.as_bytes()),
@@ -139,7 +209,14 @@ pub fn run_brokered_from_files(
         change_plan: sha256_hex(plan_content.as_bytes()),
     };
 
-    let job = resolve_job(&principal, &catalog, &plan, &invocation, hashes)?;
+    let job = resolve_job(
+        &principal,
+        &catalog,
+        &plan,
+        &invocation,
+        hashes,
+        catalog_control,
+    )?;
     Ok(run_job(principal, job)?)
 }
 
@@ -157,6 +234,7 @@ fn resolve_job(
     plan: &ChangePlan,
     invocation: &ToolInvocation,
     hashes: InputHashes,
+    catalog_control: VerifiedCatalogControl,
 ) -> Result<JobSpec, ToolBrokerError> {
     validate_catalog(catalog)?;
 
@@ -237,6 +315,18 @@ fn resolve_job(
     audit_context.insert("tool_role".into(), role_name(invocation.role).into());
     audit_context.insert("change_plan_sha256".into(), hashes.change_plan);
     audit_context.insert("tool_catalog_sha256".into(), hashes.catalog);
+    audit_context.insert(
+        "tool_catalog_signer".into(),
+        catalog_control.signer_id,
+    );
+    audit_context.insert(
+        "tool_catalog_trust_policy_sha256".into(),
+        catalog_control.trust_policy_sha256,
+    );
+    audit_context.insert(
+        "tool_catalog_signature_sha256".into(),
+        catalog_control.signature_sha256,
+    );
     audit_context.insert("tool_invocation_sha256".into(), hashes.invocation);
     audit_context.insert("principal_policy_sha256".into(), hashes.principal);
 
@@ -258,6 +348,92 @@ fn resolve_job(
         audit_log: invocation.audit_log.clone(),
         artifact_store: invocation.artifact_store.clone(),
     })
+}
+
+fn verify_catalog_signature(
+    catalog_bytes: &[u8],
+    trust_policy_bytes: &[u8],
+    signature_bytes: &[u8],
+    policy: &CatalogTrustPolicy,
+    statement: &CatalogSignature,
+) -> Result<VerifiedCatalogControl, ToolBrokerError> {
+    if policy.version != 1 {
+        return Err(ToolBrokerError::UnsupportedCatalogTrustVersion(
+            policy.version,
+        ));
+    }
+    if statement.version != 1 {
+        return Err(ToolBrokerError::UnsupportedCatalogSignatureVersion(
+            statement.version,
+        ));
+    }
+
+    let mut signer_ids = BTreeSet::new();
+    for signer in &policy.signers {
+        if !signer_ids.insert(signer.id.as_str()) {
+            return Err(ToolBrokerError::DuplicateCatalogSigner(signer.id.clone()));
+        }
+    }
+
+    let actual_hash = sha256_hex(catalog_bytes);
+    if statement.catalog_sha256 != actual_hash {
+        return Err(ToolBrokerError::CatalogHashMismatch {
+            signed: statement.catalog_sha256.clone(),
+            actual: actual_hash,
+        });
+    }
+
+    let signer = policy
+        .signers
+        .iter()
+        .find(|signer| signer.id == statement.signer_id)
+        .ok_or_else(|| ToolBrokerError::UntrustedCatalogSigner(statement.signer_id.clone()))?;
+
+    let public_bytes = decode_fixed::<32>(&signer.public_key_hex)
+        .map_err(|_| ToolBrokerError::InvalidCatalogPublicKey(signer.id.clone()))?;
+    let verifying_key = VerifyingKey::from_bytes(&public_bytes)
+        .map_err(|_| ToolBrokerError::InvalidCatalogPublicKey(signer.id.clone()))?;
+    let signature_raw = decode_fixed::<64>(&statement.signature_hex)
+        .map_err(|_| ToolBrokerError::InvalidCatalogSignatureLength(signer.id.clone()))?;
+    let signature = Signature::from_bytes(&signature_raw);
+    let payload = catalog_signature_payload(&statement.signer_id, &statement.catalog_sha256);
+
+    verifying_key
+        .verify(&payload, &signature)
+        .map_err(|_| ToolBrokerError::CatalogSignatureInvalid(signer.id.clone()))?;
+
+    Ok(VerifiedCatalogControl {
+        signer_id: signer.id.clone(),
+        trust_policy_sha256: sha256_hex(trust_policy_bytes),
+        signature_sha256: sha256_hex(signature_bytes),
+    })
+}
+
+fn catalog_signature_payload(signer_id: &str, catalog_sha256: &str) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(
+        CATALOG_SIGNATURE_DOMAIN.len() + signer_id.len() + catalog_sha256.len() + 2,
+    );
+    payload.extend_from_slice(CATALOG_SIGNATURE_DOMAIN);
+    payload.push(0);
+    payload.extend_from_slice(signer_id.as_bytes());
+    payload.push(0);
+    payload.extend_from_slice(catalog_sha256.as_bytes());
+    payload
+}
+
+fn catalog_sidecar_path(catalog_path: &Path, kind: &str) -> PathBuf {
+    let stem = catalog_path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("catalog");
+    catalog_path.with_file_name(format!("{stem}.{kind}.json"))
+}
+
+fn decode_fixed<const N: usize>(value: &str) -> Result<[u8; N], hex::FromHexError> {
+    let decoded = hex::decode(value)?;
+    decoded
+        .try_into()
+        .map_err(|_| hex::FromHexError::InvalidStringLength)
 }
 
 fn validate_catalog(catalog: &ToolCatalog) -> Result<(), ToolBrokerError> {
@@ -318,6 +494,7 @@ fn role_name(role: ToolRole) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
     use oryvael_protocol::{CapabilityGrant, ChangeClass, PrincipalKind};
 
     fn principal(id: &str) -> Principal {
@@ -394,6 +571,14 @@ mod tests {
         }
     }
 
+    fn catalog_control() -> VerifiedCatalogControl {
+        VerifiedCatalogControl {
+            signer_id: "root/test".into(),
+            trust_policy_sha256: "e".repeat(64),
+            signature_sha256: "f".repeat(64),
+        }
+    }
+
     #[test]
     fn developer_action_is_bound_to_plan() {
         let principal = principal("developer-ai/demo");
@@ -403,6 +588,7 @@ mod tests {
             &plan(),
             &invocation(ToolRole::Developer, "developer-ai/demo"),
             hashes(),
+            catalog_control(),
         )
         .unwrap();
 
@@ -414,6 +600,10 @@ mod tests {
         assert_eq!(
             job.audit_context.get("change_plan_sha256"),
             Some(&"d".repeat(64))
+        );
+        assert_eq!(
+            job.audit_context.get("tool_catalog_signer"),
+            Some(&"root/test".to_owned())
         );
     }
 
@@ -429,7 +619,8 @@ mod tests {
                 &catalog(),
                 &plan,
                 &invocation(ToolRole::Developer, "developer-ai/demo"),
-                hashes()
+                hashes(),
+                catalog_control(),
             ),
             Err(ToolBrokerError::ToolNotInRequestedCapabilities(_))
         ));
@@ -445,9 +636,57 @@ mod tests {
                 &catalog(),
                 &plan(),
                 &invocation(ToolRole::Test, "developer-ai/demo"),
-                hashes()
+                hashes(),
+                catalog_control(),
             ),
             Err(ToolBrokerError::VerifierNotIndependent)
+        ));
+    }
+
+    #[test]
+    fn signed_catalog_verifies_and_tampering_is_rejected() {
+        let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
+        let signer_id = "root/test";
+        let catalog_bytes = b"{\"version\":\"1\",\"tools\":[]}";
+        let catalog_hash = sha256_hex(catalog_bytes);
+        let signature = signing_key.sign(&catalog_signature_payload(signer_id, &catalog_hash));
+
+        let policy = CatalogTrustPolicy {
+            version: 1,
+            signers: vec![CatalogTrustedSigner {
+                id: signer_id.into(),
+                public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+            }],
+        };
+        let statement = CatalogSignature {
+            version: 1,
+            signer_id: signer_id.into(),
+            catalog_sha256: catalog_hash,
+            signature_hex: hex::encode(signature.to_bytes()),
+        };
+        let policy_bytes = serde_json::to_vec(&policy).unwrap();
+        let statement_bytes = serde_json::to_vec(&statement).unwrap();
+
+        assert!(
+            verify_catalog_signature(
+                catalog_bytes,
+                &policy_bytes,
+                &statement_bytes,
+                &policy,
+                &statement,
+            )
+            .is_ok()
+        );
+
+        assert!(matches!(
+            verify_catalog_signature(
+                b"tampered",
+                &policy_bytes,
+                &statement_bytes,
+                &policy,
+                &statement,
+            ),
+            Err(ToolBrokerError::CatalogHashMismatch { .. })
         ));
     }
 }
