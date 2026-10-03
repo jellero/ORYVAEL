@@ -26,6 +26,23 @@
       ]
     },
     {
+      "id": "oryvael-control",
+      "layer": "trusted_core",
+      "dependencies": [],
+      "allowed_dependencies": [],
+      "forbidden_dependencies": [
+        "oryvael-cli",
+        "oryvael-tool-broker"
+      ],
+      "capabilities_required": [],
+      "capabilities_exposed": [
+        "control.verify",
+        "root-trust.evaluate",
+        "root-key.revocation.evaluate",
+        "root-epoch.rollback-protect"
+      ]
+    },
+    {
       "id": "oryvael-policy",
       "layer": "trusted_core",
       "dependencies": [
@@ -80,13 +97,15 @@
         "linux-kernel",
         "oryvael-protocol",
         "oryvael-policy",
-        "oryvael-audit"
+        "oryvael-audit",
+        "oryvael-control"
       ],
       "allowed_dependencies": [
         "linux-kernel",
         "oryvael-protocol",
         "oryvael-policy",
-        "oryvael-audit"
+        "oryvael-audit",
+        "oryvael-control"
       ],
       "forbidden_dependencies": [
         "oryvael-cli"
@@ -108,6 +127,7 @@
         "oryvael-policy",
         "oryvael-audit",
         "oryvael-arch",
+        "oryvael-control",
         "oryvael-supervisor",
         "oryvael-tool-broker",
         "oryvael-proof",
@@ -122,6 +142,7 @@
         "oryvael-policy",
         "oryvael-audit",
         "oryvael-arch",
+        "oryvael-control",
         "oryvael-supervisor",
         "oryvael-tool-broker",
         "oryvael-proof",
@@ -142,11 +163,13 @@
       "layer": "system_service",
       "dependencies": [
         "oryvael-protocol",
-        "oryvael-supervisor"
+        "oryvael-supervisor",
+        "oryvael-control"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
-        "oryvael-supervisor"
+        "oryvael-supervisor",
+        "oryvael-control"
       ],
       "forbidden_dependencies": [],
       "capabilities_required": [
@@ -163,12 +186,14 @@
       "dependencies": [
         "oryvael-protocol",
         "oryvael-evidence",
-        "oryvael-build"
+        "oryvael-build",
+        "oryvael-control"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
         "oryvael-evidence",
-        "oryvael-build"
+        "oryvael-build",
+        "oryvael-control"
       ],
       "forbidden_dependencies": [
         "oryvael-cli",
@@ -186,12 +211,14 @@
       "dependencies": [
         "oryvael-protocol",
         "oryvael-policy",
-        "oryvael-audit"
+        "oryvael-audit",
+        "oryvael-control"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
         "oryvael-policy",
-        "oryvael-audit"
+        "oryvael-audit",
+        "oryvael-control"
       ],
       "forbidden_dependencies": [
         "oryvael-tool-broker"
@@ -271,10 +298,12 @@
       "id": "oryvael-build",
       "layer": "trusted_core",
       "dependencies": [
-        "oryvael-protocol"
+        "oryvael-protocol",
+        "oryvael-control"
       ],
       "allowed_dependencies": [
-        "oryvael-protocol"
+        "oryvael-protocol",
+        "oryvael-control"
       ],
       "forbidden_dependencies": [
         "oryvael-cli",
