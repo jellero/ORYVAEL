@@ -12,6 +12,8 @@ use thiserror::Error;
 const CONTROL_SIGNATURE_DOMAIN: &[u8] = b"ORYVAEL-CONTROL-V1";
 pub const ROOT_POLICY_ENV: &str = "ORYVAEL_ROOT_POLICY";
 pub const ROOT_POLICY_MIN_EPOCH_ENV: &str = "ORYVAEL_ROOT_POLICY_MIN_EPOCH";
+pub const DEFAULT_ROOT_POLICY: &str = "/etc/oryvael/root-policy.json";
+pub const DEFAULT_ROOT_POLICY_MIN_EPOCH: &str = "/etc/oryvael/root-policy.min-epoch";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
@@ -95,8 +97,8 @@ pub struct VerifiedControl {
 
 #[derive(Debug, Error)]
 pub enum ControlError {
-    #[error("ORYVAEL root trust path is not configured in {0}")]
-    MissingRootPolicyEnv(String),
+    #[error("ORYVAEL root trust policy is unavailable: {0}")]
+    MissingRootPolicy(String),
     #[error("invalid minimum root epoch in {0}: {1}")]
     InvalidMinimumEpoch(String, String),
     #[error("root trust policy version {0} is unsupported")]
@@ -125,7 +127,9 @@ pub enum ControlError {
     InvalidPublicKey { id: String, key_version: u64 },
     #[error("invalid signature length for root signer {id}@{key_version}")]
     InvalidSignatureLength { id: String, key_version: u64 },
-    #[error("control artifact hash mismatch: signature binds {signed}, actual artifact is {actual}")]
+    #[error(
+        "control artifact hash mismatch: signature binds {signed}, actual artifact is {actual}"
+    )]
     ArtifactHashMismatch { signed: String, actual: String },
     #[error("control signature verification failed for root signer {id}@{key_version}")]
     SignatureInvalid { id: String, key_version: u64 },
@@ -141,8 +145,10 @@ pub fn verify_from_env(
     artifact_path: impl AsRef<Path>,
     kind: ControlKind,
 ) -> Result<VerifiedControl, ControlError> {
-    let root = env::var(ROOT_POLICY_ENV)
-        .map_err(|_| ControlError::MissingRootPolicyEnv(ROOT_POLICY_ENV.into()))?;
+    let root = env::var(ROOT_POLICY_ENV).unwrap_or_else(|_| DEFAULT_ROOT_POLICY.into());
+    if !Path::new(&root).is_file() {
+        return Err(ControlError::MissingRootPolicy(root));
+    }
     verify_from_files(artifact_path, root, kind)
 }
 
@@ -163,10 +169,7 @@ pub fn verify_from_files(
     let statement: ControlSignature = serde_json::from_slice(&signature_bytes)?;
     validate_root_policy(&policy)?;
 
-    if let Ok(raw) = env::var(ROOT_POLICY_MIN_EPOCH_ENV) {
-        let minimum = raw.parse::<u64>().map_err(|_| {
-            ControlError::InvalidMinimumEpoch(ROOT_POLICY_MIN_EPOCH_ENV.into(), raw.clone())
-        })?;
+    if let Some(minimum) = minimum_root_epoch()? {
         if policy.epoch < minimum {
             return Err(ControlError::RootEpochRollback {
                 actual: policy.epoch,
@@ -218,18 +221,16 @@ pub fn verify_from_files(
         });
     }
 
-    let public_bytes = decode_fixed::<32>(&signer.public_key_hex).map_err(|_| {
-        ControlError::InvalidPublicKey {
+    let public_bytes =
+        decode_fixed::<32>(&signer.public_key_hex).map_err(|_| ControlError::InvalidPublicKey {
             id: signer.id.clone(),
             key_version: signer.key_version,
-        }
-    })?;
-    let verifying_key = VerifyingKey::from_bytes(&public_bytes).map_err(|_| {
-        ControlError::InvalidPublicKey {
+        })?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&public_bytes).map_err(|_| ControlError::InvalidPublicKey {
             id: signer.id.clone(),
             key_version: signer.key_version,
-        }
-    })?;
+        })?;
     let signature_bytes_raw = decode_fixed::<64>(&statement.signature_hex).map_err(|_| {
         ControlError::InvalidSignatureLength {
             id: signer.id.clone(),
@@ -291,7 +292,11 @@ pub fn public_key_from_private_file(
     private_key_path: impl AsRef<Path>,
 ) -> Result<String, ControlError> {
     let private_key = read_private_key(private_key_path.as_ref())?;
-    Ok(hex::encode(SigningKey::from_bytes(&private_key).verifying_key().to_bytes()))
+    Ok(hex::encode(
+        SigningKey::from_bytes(&private_key)
+            .verifying_key()
+            .to_bytes(),
+    ))
 }
 
 pub fn signature_sidecar_path(artifact_path: &Path) -> PathBuf {
@@ -300,6 +305,25 @@ pub fn signature_sidecar_path(artifact_path: &Path) -> PathBuf {
         .and_then(|name| name.to_str())
         .unwrap_or("control");
     artifact_path.with_file_name(format!("{name}.control.json"))
+}
+
+fn minimum_root_epoch() -> Result<Option<u64>, ControlError> {
+    if let Ok(raw) = env::var(ROOT_POLICY_MIN_EPOCH_ENV) {
+        let minimum = raw.trim().parse::<u64>().map_err(|_| {
+            ControlError::InvalidMinimumEpoch(ROOT_POLICY_MIN_EPOCH_ENV.into(), raw.clone())
+        })?;
+        return Ok(Some(minimum));
+    }
+
+    let path = Path::new(DEFAULT_ROOT_POLICY_MIN_EPOCH);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = fs::read_to_string(path)?;
+    let minimum = raw.trim().parse::<u64>().map_err(|_| {
+        ControlError::InvalidMinimumEpoch(DEFAULT_ROOT_POLICY_MIN_EPOCH.into(), raw.clone())
+    })?;
+    Ok(Some(minimum))
 }
 
 fn validate_root_policy(policy: &RootTrustPolicy) -> Result<(), ControlError> {
@@ -359,7 +383,9 @@ fn canonical_file(path: &Path) -> Result<PathBuf, ControlError> {
 
 fn decode_fixed<const N: usize>(value: &str) -> Result<[u8; N], hex::FromHexError> {
     let decoded = hex::decode(value)?;
-    decoded.try_into().map_err(|_| hex::FromHexError::InvalidStringLength)
+    decoded
+        .try_into()
+        .map_err(|_| hex::FromHexError::InvalidStringLength)
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -417,12 +443,7 @@ mod tests {
         fs::write(&root_path, serde_json::to_vec(&root).expect("root json")).expect("root");
 
         let hash = sha256_hex(&fs::read(&artifact).expect("artifact bytes"));
-        let payload = signature_payload(
-            ControlKind::ChangePlan,
-            "governance-root",
-            2,
-            &hash,
-        );
+        let payload = signature_payload(ControlKind::ChangePlan, "governance-root", 2, &hash);
         let statement = ControlSignature {
             version: 1,
             kind: ControlKind::ChangePlan,
@@ -432,16 +453,14 @@ mod tests {
             signature_hex: hex::encode(new_signing.sign(&payload).to_bytes()),
         };
         let sidecar = signature_sidecar_path(&artifact);
-        fs::write(&sidecar, serde_json::to_vec(&statement).expect("statement json"))
-            .expect("statement");
+        fs::write(
+            &sidecar,
+            serde_json::to_vec(&statement).expect("statement json"),
+        )
+        .expect("statement");
         assert!(verify_from_files(&artifact, &root_path, ControlKind::ChangePlan).is_ok());
 
-        let old_payload = signature_payload(
-            ControlKind::ChangePlan,
-            "governance-root",
-            1,
-            &hash,
-        );
+        let old_payload = signature_payload(ControlKind::ChangePlan, "governance-root", 1, &hash);
         let old_statement = ControlSignature {
             version: 1,
             kind: ControlKind::ChangePlan,
