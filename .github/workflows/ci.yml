@@ -29,6 +29,12 @@ jobs:
       - name: Tests
         run: cargo test --locked --workspace
 
+      - name: Build ORYVAEL CLI for root controls
+        run: cargo build --locked -p oryvael-cli
+
+      - name: Install rotated signed root controls
+        run: bash scripts/ci/setup-control-root.sh ./target/debug/oryvael
+
       - name: Validate JSON schemas
         run: |
           for f in spec/*.json; do
@@ -256,6 +262,9 @@ jobs:
       - name: Build ORYVAEL CLI
         run: cargo build --locked -p oryvael-cli
 
+      - name: Install rotated signed root controls
+        run: bash scripts/ci/setup-control-root.sh ./target/debug/oryvael
+
       - name: Capture locked release dependency graph
         run: cargo metadata --locked --format-version 1 > /tmp/oryvael-release-cargo-metadata.json
 
@@ -469,6 +478,11 @@ jobs:
           with open("/tmp/oryvael-workspace-denied-request.json", "w", encoding="utf-8") as handle:
               json.dump(request, handle)
           PY
+
+          bash scripts/ci/sign-control.sh principal_policy \
+            /tmp/oryvael-workspace-no-branch-principal.json
+          bash scripts/ci/sign-control.sh change_plan \
+            /tmp/oryvael-workspace-denied-plan.json
 
           set +e
           sudo ./target/debug/oryvael workspace-create \
@@ -891,6 +905,9 @@ jobs:
               handle.write("\n")
           PY
 
+          bash scripts/ci/sign-control.sh change_plan \
+            /tmp/oryvael-modified-audited-plan.json
+
           set +e
           sudo ./target/debug/oryvael proof-build-audited \
             --plan /tmp/oryvael-modified-audited-plan.json \
@@ -1300,6 +1317,9 @@ jobs:
           with open("/tmp/oryvael-tool-denied-invocation.json", "w", encoding="utf-8") as handle:
               json.dump(invocation, handle)
           PY
+
+          bash scripts/ci/sign-control.sh principal_policy \
+            /tmp/oryvael-no-tool-principal.json
 
           set +e
           sudo ./target/debug/oryvael tool-run \
