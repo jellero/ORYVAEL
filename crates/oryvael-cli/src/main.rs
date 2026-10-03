@@ -1,7 +1,10 @@
 #![forbid(unsafe_code)]
 
 use clap::{Parser, Subcommand};
-use oryvael_approval::{public_key_from_private_file, sign_from_files, verify_from_files};
+use oryvael_approval::{
+    ControlPurpose, public_key_from_private_file, sign_control_hash_from_file, sign_from_files,
+    verify_control_from_files, verify_from_files,
+};
 use oryvael_arch::Architecture;
 use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_build::{
@@ -114,6 +117,26 @@ enum Command {
         bundle: String,
         #[arg(long)]
         context: String,
+    },
+    ControlSignHash {
+        #[arg(long)]
+        private_key: String,
+        #[arg(long)]
+        signer_id: String,
+        #[arg(long)]
+        purpose: String,
+        #[arg(long)]
+        sha256: String,
+    },
+    ControlVerifyHash {
+        #[arg(long)]
+        policy: String,
+        #[arg(long)]
+        bundle: String,
+        #[arg(long)]
+        purpose: String,
+        #[arg(long)]
+        sha256: String,
     },
     BuildManifest {
         #[arg(long)]
@@ -274,6 +297,29 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("{}", serde_json::to_string_pretty(&verification)?);
             if !verification.eligible {
                 process::exit(6);
+            }
+        }
+        Command::ControlSignHash {
+            private_key,
+            signer_id,
+            purpose,
+            sha256,
+        } => {
+            let purpose: ControlPurpose = purpose.parse()?;
+            let statement = sign_control_hash_from_file(private_key, &signer_id, purpose, &sha256)?;
+            println!("{}", serde_json::to_string_pretty(&statement)?);
+        }
+        Command::ControlVerifyHash {
+            policy,
+            bundle,
+            purpose,
+            sha256,
+        } => {
+            let purpose: ControlPurpose = purpose.parse()?;
+            let verification = verify_control_from_files(policy, bundle, purpose, &sha256)?;
+            println!("{}", serde_json::to_string_pretty(&verification)?);
+            if !verification.eligible {
+                process::exit(8);
             }
         }
         Command::BuildManifest { plan, input } => {

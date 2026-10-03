@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/control-trust-policy.schema.json",
+  "title": "ORYVAEL Control Trust Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "thresholds", "signers"],
+  "properties": {
+    "version": {"const": 1},
+    "thresholds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["purpose", "required"],
+        "properties": {
+          "purpose": {"enum": ["tool_catalog", "principal_policy", "workspace_registry", "architecture_contract"]},
+          "required": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "signers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "public_key_hex", "allowed_purposes"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "public_key_hex": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "allowed_purposes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"enum": ["tool_catalog", "principal_policy", "workspace_registry", "architecture_contract"]}
+          }
+        }
+      }
+    }
+  }
+}

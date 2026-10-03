@@ -425,6 +425,7 @@ name = "oryvael-tool-broker"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "oryvael-approval",
  "oryvael-protocol",
  "oryvael-supervisor",
  "serde",

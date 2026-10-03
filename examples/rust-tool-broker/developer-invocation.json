@@ -3,6 +3,8 @@
   "role": "developer",
   "change_id": "CHG-RUST-BROKER-001",
   "change_plan": "examples/rust-tool-broker/change-plan.json",
+  "catalog_trust_policy": "examples/tool-broker/catalog-trust-policy.json",
+  "catalog_signature_bundle": "examples/tool-broker/catalog-signatures.json",
   "workspace": "/tmp/oryvael-rust-tool-workspace",
   "tool": "rust",
   "action": "check",

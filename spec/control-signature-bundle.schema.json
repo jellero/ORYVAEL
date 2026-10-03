@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/control-signature-bundle.schema.json",
+  "title": "ORYVAEL Control Signature Bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["signatures"],
+  "properties": {
+    "signatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version", "signer_id", "purpose", "artifact_sha256", "signature_hex"],
+        "properties": {
+          "version": {"const": 1},
+          "signer_id": {"type": "string", "minLength": 1},
+          "purpose": {"enum": ["tool_catalog", "principal_policy", "workspace_registry", "architecture_contract"]},
+          "artifact_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "signature_hex": {"type": "string", "pattern": "^[a-fA-F0-9]{128}$"}
+        }
+      }
+    }
+  }
+}

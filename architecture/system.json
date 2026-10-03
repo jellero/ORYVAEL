@@ -142,16 +142,19 @@
       "layer": "system_service",
       "dependencies": [
         "oryvael-protocol",
-        "oryvael-supervisor"
+        "oryvael-supervisor",
+        "oryvael-approval"
       ],
       "allowed_dependencies": [
         "oryvael-protocol",
-        "oryvael-supervisor"
+        "oryvael-supervisor",
+        "oryvael-approval"
       ],
       "forbidden_dependencies": [],
       "capabilities_required": [
         "tool.execute",
-        "change-plan.bind"
+        "change-plan.bind",
+        "control-artifact.verify"
       ],
       "capabilities_exposed": [
         "tool.invoke"
@@ -264,7 +267,9 @@
       "capabilities_required": [],
       "capabilities_exposed": [
         "human-approval.verify",
-        "root-trust.evaluate"
+        "root-trust.evaluate",
+        "control-artifact.verify",
+        "control-artifact.sign.reference"
       ]
     },
     {

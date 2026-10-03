@@ -3,6 +3,8 @@
   "role": "test",
   "change_id": "CHG-CRITICAL-APPROVAL-001",
   "change_plan": "examples/critical-release/c3-plan.json",
+  "catalog_trust_policy": "examples/tool-broker/catalog-trust-policy.json",
+  "catalog_signature_bundle": "examples/tool-broker/catalog-signatures.json",
   "workspace": "/tmp/oryvael-tool-demo-workspace",
   "tool": "python",
   "action": "syntax-check",

@@ -1,0 +1,11 @@
+{
+  "signatures": [
+    {
+      "version": 1,
+      "signer_id": "test-root/tool-catalog",
+      "purpose": "tool_catalog",
+      "artifact_sha256": "f8f7fcfafc923c6e03fb4440563152495d054ac6952a60fe8323680beec57959",
+      "signature_hex": "ecfaef91e1d654a9cc7f730294d712d615fc3cf04d247968e8811d8f4c31997038ec0ee5a9a09d794ed40bc16914167d233835d1fedbbeb4e4b5f8439edc7109"
+    }
+  ]
+}
