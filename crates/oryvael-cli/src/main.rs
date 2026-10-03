@@ -306,8 +306,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             sha256,
         } => {
             let purpose: ControlPurpose = purpose.parse()?;
-            let statement =
-                sign_control_hash_from_file(private_key, &signer_id, purpose, &sha256)?;
+            let statement = sign_control_hash_from_file(private_key, &signer_id, purpose, &sha256)?;
             println!("{}", serde_json::to_string_pretty(&statement)?);
         }
         Command::ControlVerifyHash {
