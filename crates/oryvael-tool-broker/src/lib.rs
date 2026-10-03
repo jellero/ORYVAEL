@@ -315,10 +315,7 @@ fn resolve_job(
     audit_context.insert("tool_role".into(), role_name(invocation.role).into());
     audit_context.insert("change_plan_sha256".into(), hashes.change_plan);
     audit_context.insert("tool_catalog_sha256".into(), hashes.catalog);
-    audit_context.insert(
-        "tool_catalog_signer".into(),
-        catalog_control.signer_id,
-    );
+    audit_context.insert("tool_catalog_signer".into(), catalog_control.signer_id);
     audit_context.insert(
         "tool_catalog_trust_policy_sha256".into(),
         catalog_control.trust_policy_sha256,
@@ -602,8 +599,10 @@ mod tests {
             Some(&"d".repeat(64))
         );
         assert_eq!(
-            job.audit_context.get("tool_catalog_signer"),
-            Some(&"root/test".to_owned())
+            job.audit_context
+                .get("tool_catalog_signer")
+                .map(String::as_str),
+            Some("root/test")
         );
     }
 
