@@ -7,6 +7,11 @@ use oryvael_audit::{AuditLedger, AuditRecord};
 use oryvael_build::{
     build_from_files as build_manifest_from_files, compare_from_files as compare_builds_from_files,
 };
+use oryvael_control::{
+    ControlKind, public_key_from_private_file as control_public_key_from_private_file,
+    sign_from_files as sign_control_from_files, verify_from_env as verify_control_from_env,
+    verify_from_files as verify_control_from_files,
+};
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
 use oryvael_protocol::{Operation, Principal};
@@ -17,6 +22,7 @@ use oryvael_release::{
 use oryvael_supervisor::{host_status, run_from_files};
 use oryvael_tool_broker::run_brokered_from_files;
 use oryvael_workspace::create_from_files as create_workspace_from_files;
+use serde_json::Value;
 use std::{error::Error, fs, io, process};
 
 #[derive(Debug, Parser)]
@@ -115,6 +121,30 @@ enum Command {
         #[arg(long)]
         context: String,
     },
+    ControlPublicKey {
+        #[arg(long)]
+        private_key: String,
+    },
+    ControlSign {
+        #[arg(long)]
+        private_key: String,
+        #[arg(long)]
+        signer_id: String,
+        #[arg(long)]
+        key_version: u64,
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        artifact: String,
+    },
+    ControlVerify {
+        #[arg(long)]
+        root_policy: String,
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        artifact: String,
+    },
     BuildManifest {
         #[arg(long)]
         plan: String,
@@ -161,6 +191,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             principal,
             operation,
         } => {
+            verify_control_from_env(&principal, ControlKind::PrincipalPolicy)?;
             let principal: Principal = read_json(&principal)?;
             let operation: Operation = read_json(&operation)?;
             let decision = oryvael_policy::evaluate(&principal, &operation);
@@ -190,6 +221,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("audit chain valid: {} records", ledger.records().len());
         }
         Command::Supervise { principal, job } => {
+            verify_control_from_env(&principal, ControlKind::PrincipalPolicy)?;
             let result = run_from_files(principal, job)?;
             println!("{}", serde_json::to_string_pretty(&result)?);
             if !result.success {
@@ -208,6 +240,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             catalog,
             invocation,
         } => {
+            verify_control_from_env(&principal, ControlKind::PrincipalPolicy)?;
+            verify_control_from_env(&catalog, ControlKind::ToolCatalog)?;
+            let plan = control_reference(&invocation, "change_plan")?;
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let result = run_brokered_from_files(principal, catalog, invocation)?;
             println!("{}", serde_json::to_string_pretty(&result)?);
             if !result.success {
@@ -215,6 +251,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         Command::ProofBuild { plan, evidence } => {
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let package = build_from_files(plan, evidence)?;
             println!("{}", serde_json::to_string_pretty(&package)?);
             if !package.eligible {
@@ -222,6 +259,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         Command::ProofBuildAudited { plan, input } => {
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let package = build_audited_from_files(plan, input)?;
             println!("{}", serde_json::to_string_pretty(&package)?);
             if !package.eligible {
@@ -233,6 +271,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             registry,
             request,
         } => {
+            verify_control_from_env(&principal, ControlKind::PrincipalPolicy)?;
+            verify_control_from_env(&registry, ControlKind::WorkspaceRegistry)?;
+            let plan = control_reference(&request, "change_plan")?;
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let result = create_workspace_from_files(principal, registry, request)?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
@@ -250,6 +292,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             artifact,
             ring,
         } => {
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let context =
                 approval_context_from_files(plan, input, &artifact_name, artifact, &ring)?;
             println!("{}", serde_json::to_string_pretty(&context)?);
@@ -276,7 +319,32 @@ fn main() -> Result<(), Box<dyn Error>> {
                 process::exit(6);
             }
         }
+        Command::ControlPublicKey { private_key } => {
+            println!("{}", control_public_key_from_private_file(private_key)?);
+        }
+        Command::ControlSign {
+            private_key,
+            signer_id,
+            key_version,
+            kind,
+            artifact,
+        } => {
+            let kind = ControlKind::parse(&kind)?;
+            let signature =
+                sign_control_from_files(private_key, &signer_id, key_version, kind, artifact)?;
+            println!("{}", serde_json::to_string_pretty(&signature)?);
+        }
+        Command::ControlVerify {
+            root_policy,
+            kind,
+            artifact,
+        } => {
+            let kind = ControlKind::parse(&kind)?;
+            let verified = verify_control_from_files(artifact, root_policy, kind)?;
+            println!("{}", serde_json::to_string_pretty(&verified)?);
+        }
         Command::BuildManifest { plan, input } => {
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let manifest = build_manifest_from_files(plan, input)?;
             println!("{}", serde_json::to_string_pretty(&manifest)?);
         }
@@ -296,6 +364,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             approval_policy,
             approval_bundle,
         } => {
+            verify_control_from_env(&plan, ControlKind::ChangePlan)?;
             let decision = match (approval_policy, approval_bundle) {
                 (Some(policy), Some(bundle)) => check_from_files_with_approvals(
                     plan,
@@ -330,4 +399,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn read_json<T: serde::de::DeserializeOwned>(path: &str) -> Result<T, Box<dyn Error>> {
     let content = fs::read_to_string(path)?;
     Ok(serde_json::from_str(&content)?)
+}
+
+fn control_reference(path: &str, field: &str) -> Result<String, Box<dyn Error>> {
+    let value: Value = read_json(path)?;
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("control input {path} is missing string field {field}"),
+            )
+            .into()
+        })
 }
