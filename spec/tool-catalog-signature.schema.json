@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/tool-catalog-signature.schema.json",
+  "title": "ORYVAEL Tool Catalog Signature",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "signer_id", "catalog_sha256", "signature_hex"],
+  "properties": {
+    "version": {"const": 1},
+    "signer_id": {"type": "string", "minLength": 1},
+    "catalog_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "signature_hex": {"type": "string", "pattern": "^[a-fA-F0-9]{128}$"}
+  }
+}
