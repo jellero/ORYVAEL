@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+use oryvael_approval::{
+    ApprovalError, ControlPurpose, ControlSignatureBundle, ControlTrustPolicy, ControlVerification,
+    verify_control,
+};
 use oryvael_protocol::{ChangePlan, Operation, Principal};
 use oryvael_supervisor::{
     JobResult, JobSpec, NetworkMode, ResourceLimits, SupervisorError, run_job,
@@ -78,6 +82,8 @@ pub enum ToolBrokerError {
     ToolNotInRequestedCapabilities(String),
     #[error("change plan does not require verifier action {0}")]
     ToolNotInVerificationPlan(String),
+    #[error("tool catalog root trust verification failed: {0}")]
+    CatalogNotTrusted(String),
     #[error("unknown tool: {0}")]
     UnknownTool(String),
     #[error("unknown action {action} for tool {tool}")]
@@ -88,6 +94,8 @@ pub enum ToolBrokerError {
     DuplicateTool(String),
     #[error("invalid tool definition: {0}")]
     InvalidTool(String),
+    #[error("control signature error: {0}")]
+    ControlSignature(#[from] ApprovalError),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]
@@ -99,6 +107,8 @@ pub enum ToolBrokerError {
 pub fn run_brokered_from_files(
     principal_path: impl AsRef<Path>,
     catalog_path: impl AsRef<Path>,
+    catalog_trust_policy_path: impl AsRef<Path>,
+    catalog_signature_bundle_path: impl AsRef<Path>,
     invocation_path: impl AsRef<Path>,
 ) -> Result<JobResult, ToolBrokerError> {
     let invocation_path = canonical_file(invocation_path.as_ref())?;
@@ -111,11 +121,15 @@ pub fn run_brokered_from_files(
 
     let principal_path = canonical_file(principal_path.as_ref())?;
     let catalog_path = canonical_file(catalog_path.as_ref())?;
+    let catalog_trust_policy_path = canonical_file(catalog_trust_policy_path.as_ref())?;
+    let catalog_signature_bundle_path = canonical_file(catalog_signature_bundle_path.as_ref())?;
     let change_plan_path = canonical_file(&invocation.change_plan)?;
 
     for path in [
         &principal_path,
         &catalog_path,
+        &catalog_trust_policy_path,
+        &catalog_signature_bundle_path,
         &invocation_path,
         &change_plan_path,
     ] {
@@ -126,7 +140,21 @@ pub fn run_brokered_from_files(
 
     let principal_content = fs::read_to_string(&principal_path)?;
     let catalog_content = fs::read_to_string(&catalog_path)?;
+    let trust_policy_content = fs::read_to_string(&catalog_trust_policy_path)?;
+    let signature_bundle_content = fs::read_to_string(&catalog_signature_bundle_path)?;
     let plan_content = fs::read_to_string(&change_plan_path)?;
+
+    let catalog_hash = sha256_hex(catalog_content.as_bytes());
+    let trust = verify_catalog_trust(
+        &catalog_content,
+        &trust_policy_content,
+        &signature_bundle_content,
+    )?;
+    if !trust.eligible {
+        let mut details = trust.reasons;
+        details.extend(trust.warnings);
+        return Err(ToolBrokerError::CatalogNotTrusted(details.join("; ")));
+    }
 
     let principal: Principal = serde_json::from_str(&principal_content)?;
     let catalog: ToolCatalog = serde_json::from_str(&catalog_content)?;
@@ -134,7 +162,10 @@ pub fn run_brokered_from_files(
 
     let hashes = InputHashes {
         principal: sha256_hex(principal_content.as_bytes()),
-        catalog: sha256_hex(catalog_content.as_bytes()),
+        catalog: catalog_hash,
+        catalog_trust_policy: sha256_hex(trust_policy_content.as_bytes()),
+        catalog_signature_bundle: sha256_hex(signature_bundle_content.as_bytes()),
+        catalog_signature_signers: trust.valid_signers.join(","),
         invocation: sha256_hex(invocation_content.as_bytes()),
         change_plan: sha256_hex(plan_content.as_bytes()),
     };
@@ -143,10 +174,29 @@ pub fn run_brokered_from_files(
     Ok(run_job(principal, job)?)
 }
 
+fn verify_catalog_trust(
+    catalog_content: &str,
+    trust_policy_content: &str,
+    signature_bundle_content: &str,
+) -> Result<ControlVerification, ToolBrokerError> {
+    let policy: ControlTrustPolicy = serde_json::from_str(trust_policy_content)?;
+    let bundle: ControlSignatureBundle = serde_json::from_str(signature_bundle_content)?;
+    let catalog_hash = sha256_hex(catalog_content.as_bytes());
+    Ok(verify_control(
+        &policy,
+        &bundle,
+        ControlPurpose::ToolCatalog,
+        &catalog_hash,
+    )?)
+}
+
 #[derive(Debug, Clone)]
 struct InputHashes {
     principal: String,
     catalog: String,
+    catalog_trust_policy: String,
+    catalog_signature_bundle: String,
+    catalog_signature_signers: String,
     invocation: String,
     change_plan: String,
 }
@@ -237,6 +287,22 @@ fn resolve_job(
     audit_context.insert("tool_role".into(), role_name(invocation.role).into());
     audit_context.insert("change_plan_sha256".into(), hashes.change_plan);
     audit_context.insert("tool_catalog_sha256".into(), hashes.catalog);
+    audit_context.insert(
+        "tool_catalog_trust_policy_sha256".into(),
+        hashes.catalog_trust_policy,
+    );
+    audit_context.insert(
+        "tool_catalog_signature_bundle_sha256".into(),
+        hashes.catalog_signature_bundle,
+    );
+    audit_context.insert(
+        "tool_catalog_signature_verified".into(),
+        "true".into(),
+    );
+    audit_context.insert(
+        "tool_catalog_signature_signers".into(),
+        hashes.catalog_signature_signers,
+    );
     audit_context.insert("tool_invocation_sha256".into(), hashes.invocation);
     audit_context.insert("principal_policy_sha256".into(), hashes.principal);
 
@@ -389,8 +455,11 @@ mod tests {
         InputHashes {
             principal: "a".repeat(64),
             catalog: "b".repeat(64),
-            invocation: "c".repeat(64),
-            change_plan: "d".repeat(64),
+            catalog_trust_policy: "c".repeat(64),
+            catalog_signature_bundle: "d".repeat(64),
+            catalog_signature_signers: "root/catalog".into(),
+            invocation: "e".repeat(64),
+            change_plan: "f".repeat(64),
         }
     }
 
@@ -413,7 +482,13 @@ mod tests {
         );
         assert_eq!(
             job.audit_context.get("change_plan_sha256"),
-            Some(&"d".repeat(64))
+            Some(&"f".repeat(64))
+        );
+        assert_eq!(
+            job.audit_context
+                .get("tool_catalog_signature_verified")
+                .map(String::as_str),
+            Some("true")
         );
     }
 
@@ -449,5 +524,22 @@ mod tests {
             ),
             Err(ToolBrokerError::VerifierNotIndependent)
         ));
+    }
+
+    #[test]
+    fn committed_catalog_signature_is_valid_and_byte_bound() {
+        let catalog = include_str!("../../../examples/tool-broker/catalog.json");
+        let policy = include_str!("../../../examples/tool-broker/catalog-trust-policy.json");
+        let bundle = include_str!("../../../examples/tool-broker/catalog-signatures.json");
+
+        let verified = verify_catalog_trust(catalog, policy, bundle).unwrap();
+        assert!(verified.eligible);
+        assert_eq!(verified.valid_signers, vec!["test-root/tool-catalog"]);
+
+        let mut mutated = catalog.to_owned();
+        mutated.push(' ');
+        assert!(!verify_catalog_trust(&mutated, policy, bundle)
+            .unwrap()
+            .eligible);
     }
 }
