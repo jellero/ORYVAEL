@@ -58,10 +58,6 @@ enum Command {
         #[arg(long)]
         catalog: String,
         #[arg(long)]
-        catalog_trust_policy: String,
-        #[arg(long)]
-        catalog_signatures: String,
-        #[arg(long)]
         invocation: String,
     },
     ProofBuild {
@@ -233,17 +229,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::ToolRun {
             principal,
             catalog,
-            catalog_trust_policy,
-            catalog_signatures,
             invocation,
         } => {
-            let result = run_brokered_from_files(
-                principal,
-                catalog,
-                catalog_trust_policy,
-                catalog_signatures,
-                invocation,
-            )?;
+            let result = run_brokered_from_files(principal, catalog, invocation)?;
             println!("{}", serde_json::to_string_pretty(&result)?);
             if !result.success {
                 process::exit(3);
