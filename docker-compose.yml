@@ -1,0 +1,24 @@
+services:
+  oryvael:
+    build:
+      context: .
+      target: runtime
+    image: oryvael:dev
+    hostname: oryvael
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+    volumes:
+      - oryvael-state:/var/lib/oryvael
+      - oryvael-workspace:/workspace
+    tmpfs:
+      - /run:rw,nosuid,nodev,mode=0755
+      - /tmp:rw,nosuid,nodev,exec,size=256m
+    restart: unless-stopped
+    stop_grace_period: 5s
+
+volumes:
+  oryvael-state:
+  oryvael-workspace:
