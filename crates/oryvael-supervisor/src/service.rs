@@ -379,6 +379,7 @@ impl TrustedService {
                     AuditDecision::Denied,
                     BTreeMap::from([("error".into(), error.to_string())]),
                 )?;
+                drain_rejected_request(&mut stream);
                 write_response(
                     &mut stream,
                     &ServiceResponse::Error {
@@ -399,6 +400,7 @@ impl TrustedService {
                     AuditDecision::Denied,
                     peer_metadata(&peer, None),
                 )?;
+                drain_rejected_request(&mut stream);
                 write_response(
                     &mut stream,
                     &ServiceResponse::Error {
@@ -811,7 +813,9 @@ pub fn request(
 fn read_request(stream: &mut UnixStream) -> Result<ServiceRequest, ServiceError> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let mut bytes = Vec::new();
-    stream.take(MAX_REQUEST_BYTES + 1).read_to_end(&mut bytes)?;
+    (&mut *stream)
+        .take(MAX_REQUEST_BYTES + 1)
+        .read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err(ServiceError::Protocol("request exceeds size limit".into()));
     }
@@ -819,6 +823,15 @@ fn read_request(stream: &mut UnixStream) -> Result<ServiceRequest, ServiceError>
         return Err(ServiceError::Protocol("empty request".into()));
     }
     Ok(serde_json::from_slice(&bytes)?)
+}
+
+fn drain_rejected_request(stream: &mut UnixStream) {
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+    let mut discarded = Vec::new();
+    let _ = (&mut *stream)
+        .take(MAX_REQUEST_BYTES + 1)
+        .read_to_end(&mut discarded);
+    let _ = stream.shutdown(Shutdown::Read);
 }
 
 fn write_response(stream: &mut UnixStream, response: &ServiceResponse) -> Result<(), ServiceError> {
