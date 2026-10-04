@@ -9,6 +9,7 @@ BOOTSTRAP_DIR="$STATE_DIR/bootstrap"
 ROOT_KEY="$CONTROL_DIR/root.key"
 ROOT_POLICY="$CONTROL_DIR/root-policy.json"
 MIN_EPOCH="$CONTROL_DIR/root-policy.min-epoch"
+PEER_POLICY="$CONTROL_DIR/peer-policy.json"
 SERVICE_AUDIT="$AUDIT_DIR/trusted-service.jsonl"
 BOOTSTRAP_PRINCIPAL="$BOOTSTRAP_DIR/developer-principal.json"
 BOOTSTRAP_JOB="$BOOTSTRAP_DIR/demo-job.json"
@@ -41,7 +42,8 @@ if [ ! -f "$ROOT_KEY" ]; then
         "tool_catalog",
         "change_plan",
         "principal_policy",
-        "workspace_registry"
+        "workspace_registry",
+        "peer_policy"
       ]
     }
   ]
@@ -86,6 +88,41 @@ oryvael control-verify \
     --artifact "$BOOTSTRAP_PRINCIPAL" \
     >/dev/null
 
+service_sha256="$(sha256sum /usr/local/bin/oryvael-service | awk '{print $1}')"
+cat > "$PEER_POLICY" <<EOF
+{
+  "version": 1,
+  "bindings": [
+    {
+      "id": "docker-dev-service-client",
+      "uid": 0,
+      "gid": 0,
+      "executable_sha256": "$service_sha256",
+      "operations": ["status", "verify", "supervise"],
+      "principals": ["developer-ai/demo"]
+    }
+  ]
+}
+EOF
+chmod 0644 "$PEER_POLICY"
+
+peer_signature_tmp="$PEER_POLICY.control.json.tmp"
+oryvael control-sign \
+    --private-key "$ROOT_KEY" \
+    --signer-id governance/docker-dev \
+    --key-version 1 \
+    --kind peer_policy \
+    --artifact "$PEER_POLICY" \
+    > "$peer_signature_tmp"
+mv "$peer_signature_tmp" "$PEER_POLICY.control.json"
+chmod 0644 "$PEER_POLICY.control.json"
+
+oryvael control-verify \
+    --root-policy "$ROOT_POLICY" \
+    --kind peer_policy \
+    --artifact "$PEER_POLICY" \
+    >/dev/null
+
 case "${1:-serve}" in
     serve)
         if [ "$#" -gt 0 ]; then
@@ -95,6 +132,7 @@ case "${1:-serve}" in
             --socket "$SOCKET_PATH" \
             --root-policy "$ROOT_POLICY" \
             --minimum-epoch "$MIN_EPOCH" \
+            --peer-policy "$PEER_POLICY" \
             --audit "$SERVICE_AUDIT" \
             "$@"
         ;;
