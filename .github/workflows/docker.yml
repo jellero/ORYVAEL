@@ -55,18 +55,7 @@ jobs:
 
           cat /tmp/oryvael-supervise.json
           if [ "$status" -ne 0 ]; then
-            stderr_path="$(python3 - <<'PY'
-import json
-from pathlib import Path
-
-path = Path('/tmp/oryvael-supervise.json')
-try:
-    result = json.loads(path.read_text(encoding='utf-8'))
-    print(result.get('result', {}).get('stderr', {}).get('path', ''))
-except (OSError, json.JSONDecodeError):
-    print('')
-PY
-)"
+            stderr_path="$(python3 -c 'import json; print(json.load(open("/tmp/oryvael-supervise.json", encoding="utf-8")).get("result", {}).get("stderr", {}).get("path", ""))' 2>/dev/null || true)"
             if [ -n "$stderr_path" ]; then
               echo "--- sandbox stderr: $stderr_path ---"
               docker compose exec -T oryvael cat "$stderr_path" || true
