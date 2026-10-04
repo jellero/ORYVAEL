@@ -16,12 +16,8 @@ if [[ ! -f "$IMAGE" ]]; then
 fi
 
 find_ovmf() {
-  local name="$1"
   local candidate
-  for candidate in \
-    "/usr/share/OVMF/$name" \
-    "/usr/share/edk2/x64/$name" \
-    "/usr/share/edk2-ovmf/x64/$name"; do
+  for candidate in "$@"; do
     if [[ -f "$candidate" ]]; then
       printf '%s\n' "$candidate"
       return 0
@@ -30,8 +26,18 @@ find_ovmf() {
   return 1
 }
 
-OVMF_CODE="${OVMF_CODE:-$(find_ovmf OVMF_CODE.fd || true)}"
-OVMF_VARS="${OVMF_VARS:-$(find_ovmf OVMF_VARS.fd || true)}"
+OVMF_CODE="${OVMF_CODE:-$(find_ovmf \
+  /usr/share/OVMF/OVMF_CODE_4M.fd \
+  /usr/share/OVMF/OVMF_CODE.fd \
+  /usr/share/edk2/x64/OVMF_CODE.fd \
+  /usr/share/edk2-ovmf/x64/OVMF_CODE.fd \
+  || true)}"
+OVMF_VARS="${OVMF_VARS:-$(find_ovmf \
+  /usr/share/OVMF/OVMF_VARS_4M.fd \
+  /usr/share/OVMF/OVMF_VARS.fd \
+  /usr/share/edk2/x64/OVMF_VARS.fd \
+  /usr/share/edk2-ovmf/x64/OVMF_VARS.fd \
+  || true)}"
 
 if [[ -z "$OVMF_CODE" || -z "$OVMF_VARS" ]]; then
   echo "OVMF firmware files not found; set OVMF_CODE and OVMF_VARS" >&2
