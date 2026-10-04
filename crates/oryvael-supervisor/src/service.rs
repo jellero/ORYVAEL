@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use crate::peercred::peer_credentials;
+use crate::peercred::{PeerProcess, peer_process};
 use crate::{JobResult, JobSpec, run_job};
 use oryvael_audit::{AuditError, JsonlAuditJournal};
 use oryvael_control::{
@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::net::Shutdown;
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
@@ -24,7 +25,7 @@ pub const DEFAULT_SERVICE_SOCKET: &str = "/run/oryvael/trusted.sock";
 pub const DEFAULT_SERVICE_AUDIT: &str = "/var/lib/oryvael/audit/trusted-service.jsonl";
 pub const DEFAULT_PEER_POLICY: &str = "/etc/oryvael/peer-policy.json";
 const SERVICE_ACTOR: &str = "service/oryvael-trusted";
-const SERVICE_VERSION: &str = "oryvael-trusted-service/2";
+const SERVICE_VERSION: &str = "oryvael-trusted-service/3";
 const MAX_REQUEST_BYTES: u64 = 256 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -252,30 +253,64 @@ impl PeerPolicyOwner {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct PeerIdentity {
     pid: u32,
     uid: u32,
     gid: u32,
     executable_path: PathBuf,
     executable_sha256: String,
+    process: PeerProcess,
 }
 
 impl PeerIdentity {
     fn capture(stream: &UnixStream) -> Result<Self, ServiceError> {
-        let credentials = peer_credentials(stream)?;
+        let process = peer_process(stream)?;
+        let credentials = process.credentials();
         let pid = u32::try_from(credentials.pid)
             .map_err(|_| ServiceError::Protocol(format!("invalid peer pid {}", credentials.pid)))?;
+        process.ensure_alive()?;
+
         let proc_exe = PathBuf::from(format!("/proc/{pid}/exe"));
-        let executable_path = fs::read_link(&proc_exe)?;
-        let executable_sha256 = sha256_file(&proc_exe)?;
+        let executable_file = File::open(&proc_exe)?;
+        process.ensure_alive()?;
+
+        let stable_exe = PathBuf::from(format!(
+            "/proc/self/fd/{}",
+            executable_file.as_raw_fd()
+        ));
+        let executable_path = fs::read_link(&stable_exe)?;
+        let executable_sha256 = sha256_file(&stable_exe)?;
+        process.ensure_alive()?;
+
         Ok(Self {
             pid,
             uid: credentials.uid,
             gid: credentials.gid,
             executable_path,
             executable_sha256,
+            process,
         })
+    }
+
+    fn revalidate_executable(&self) -> Result<(), ServiceError> {
+        self.process.ensure_alive()?;
+        let proc_exe = PathBuf::from(format!("/proc/{}/exe", self.pid));
+        let executable_file = File::open(&proc_exe)?;
+        self.process.ensure_alive()?;
+
+        let stable_exe = PathBuf::from(format!(
+            "/proc/self/fd/{}",
+            executable_file.as_raw_fd()
+        ));
+        let executable_sha256 = sha256_file(&stable_exe)?;
+        self.process.ensure_alive()?;
+        if executable_sha256 != self.executable_sha256 {
+            return Err(ServiceError::Protocol(
+                "peer executable changed after connection authentication".into(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -441,6 +476,25 @@ impl TrustedService {
                 return Ok(());
             }
         };
+
+        if let Err(error) = peer.revalidate_executable() {
+            let mut metadata = peer_metadata(&peer, Some(&binding));
+            metadata.insert("error".into(), error.to_string());
+            self.append_service_event(
+                "ipc.peer.identity_changed",
+                binding.id.clone(),
+                AuditDecision::Denied,
+                metadata,
+            )?;
+            write_response(
+                &mut stream,
+                &ServiceResponse::Error {
+                    code: "peer_identity_changed".into(),
+                    message: error.to_string(),
+                },
+            )?;
+            return Ok(());
+        }
 
         let response = self.handle_request(request, &peer, &binding)?;
         write_response(&mut stream, &response)?;
@@ -682,6 +736,8 @@ impl TrustedService {
             "service_peer_executable_sha256".into(),
             peer.executable_sha256.clone(),
         );
+        spec.audit_context
+            .insert("service_peer_pidfd_bound".into(), "true".into());
         spec.audit_context.insert(
             "principal_policy_sha256".into(),
             control.artifact_sha256.clone(),
@@ -982,6 +1038,7 @@ fn peer_metadata(peer: &PeerIdentity, binding: Option<&PeerBinding>) -> BTreeMap
         ("peer_pid".into(), peer.pid.to_string()),
         ("peer_uid".into(), peer.uid.to_string()),
         ("peer_gid".into(), peer.gid.to_string()),
+        ("peer_pidfd_bound".into(), "true".into()),
         (
             "peer_executable".into(),
             peer.executable_path.to_string_lossy().into_owned(),
@@ -1295,6 +1352,7 @@ mod tests {
         assert!(ledger.records().iter().any(|record| {
             record.event.action == "ipc.peer.authenticated"
                 && record.event.metadata.contains_key("peer_pid")
+                && record.event.metadata.get("peer_pidfd_bound").map(String::as_str) == Some("true")
                 && record.event.metadata.contains_key("peer_executable_sha256")
         }));
         assert!(
