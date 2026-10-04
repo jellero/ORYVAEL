@@ -40,13 +40,18 @@ Delivered:
 - atomic persistent monotonic root-policy epoch with restart rollback rejection;
 - signed `peer_policy` as a root-authorized control artifact;
 - Linux `SO_PEERCRED` acquisition before request deserialization;
+- mandatory Linux `SO_PEERPIDFD` process-lifecycle binding for trusted-service IPC;
+- pidfd liveness checks bracketing executable acquisition and hashing;
+- opened executable-FD hashing rather than repeated mutable pathname traversal;
+- executable revalidation after request receipt and before authorization/dispatch;
 - UID/GID plus executable-SHA-256 peer binding;
 - per-binding service-operation allowlists;
 - exact peer-to-ORYVAEL-principal binding for supervised execution;
-- peer PID/UID/GID/executable attribution in the service and supervisor audit contexts;
+- peer PID/UID/GID/executable/pidfd-bound attribution in service and supervisor audit contexts;
 - single-writer service journal for root verification, IPC authorization and supervisor lifecycle telemetry;
 - explicit controlled-restart boundary for root-policy and peer-policy rotation;
 - real Linux confinement smoke test in CI;
+- end-to-end exact-binary trusted-service smoke test with same-UID foreign-executable rejection;
 - negative tests for network self-grant, worker-writable controls, unbound IPC peers and principal spoofing.
 
 Phase 1 exit criteria and current evidence:
@@ -57,12 +62,14 @@ Phase 1 exit criteria and current evidence:
 - Root epoch survives trusted-service restart and rejects rollback: verified by Trusted Core tests.
 - A running trusted service keeps a stable pinned root until controlled restart: verified by root-replacement test.
 - An unbound local process cannot use trusted-service authority: verified by signed-peer-policy negative test.
+- A same-UID process with a different executable cannot use the signed peer binding: verified end-to-end.
 - A bound process cannot claim an ORYVAEL principal absent from its binding: verified before job execution.
+- Trusted IPC identity is tied to a kernel pidfd and revalidated before dispatch.
 
 Hardening carried into Phase 1.x / Phase 2:
-- pidfd-backed process/executable identity hardening beyond `/proc/<pid>/exe` hashing;
 - migration of remaining component journals into a single-owner audit ingestion service plus external checkpoints;
 - service manager packaging/hardening and durable job recovery;
+- optional stronger workload identity/attestation beyond executable hashing;
 - distribution/hardware compatibility matrix;
 - seccomp/Landlock defense in depth;
 - cgroup-v2 accounting and lifecycle cleanup.
@@ -83,6 +90,7 @@ Delivered foundation:
 - persistent Trusted Supervisor service owns and pins root-policy bytes for its process lifetime;
 - persistent service advances root epoch atomically and rejects rollback across restart;
 - root-authorized peer policy binds kernel process identity to trusted-service operations and ORYVAEL principals;
+- pidfd-backed trusted IPC process lifecycle with no silent PID-only fallback;
 - service-level root verification, IPC authorization and lifecycle events are written by one trusted journal owner;
 - ephemeral CI roots with no committed private root key;
 - root-control enforcement at public file-based crate boundaries for supervisor, workspace, tool broker, build and proof;
@@ -108,13 +116,13 @@ Delivered foundation:
 - cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- harden local process identity with pidfd-backed lifecycle semantics;
 - migrate remaining supervisor/workspace/tool/release audit producers to authenticated single-owner audit ingestion and external checkpoints;
 - package and harden the persistent service under the system service manager, including clean restart/recovery behavior;
 - add durable job registry, cancellation and crash recovery without weakening attribution;
 - evaluate sealed `memfd`/kernel-handle backed control transport as defense in depth beyond the current private read-only snapshot model;
 - evaluate TPM/secure-element backed monotonic epoch storage and root-key recovery procedures;
 - evaluate threshold/multi-party authorization for root-policy and highly privileged catalog changes;
+- evaluate stronger workload identity using service-manager identity, LSM/cgroup labels, measured boot or key-backed challenge mechanisms;
 - replace the bounded fuzz-smoke profile with a coverage-guided fuzz backend while preserving broker isolation;
 - complete concrete Architect and Reviewer workflows around the existing role enforcement;
 - central metrics, logs and traces;
