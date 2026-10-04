@@ -41,12 +41,39 @@ jobs:
         run: docker compose exec -T oryvael oryvael supervisor-doctor
 
       - name: Run confinement demo
+        shell: bash
         run: |
+          set +e
           docker compose exec -T oryvael \
             oryvael-service supervise \
             --socket /run/oryvael/trusted.sock \
             --principal /var/lib/oryvael/bootstrap/developer-principal.json \
-            --job /var/lib/oryvael/bootstrap/demo-job.json
+            --job /var/lib/oryvael/bootstrap/demo-job.json \
+            > /tmp/oryvael-supervise.json
+          status=$?
+          set -e
+
+          cat /tmp/oryvael-supervise.json
+          if [ "$status" -ne 0 ]; then
+            stderr_path="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path('/tmp/oryvael-supervise.json')
+try:
+    result = json.loads(path.read_text(encoding='utf-8'))
+    print(result.get('result', {}).get('stderr', {}).get('path', ''))
+except (OSError, json.JSONDecodeError):
+    print('')
+PY
+)"
+            if [ -n "$stderr_path" ]; then
+              echo "--- sandbox stderr: $stderr_path ---"
+              docker compose exec -T oryvael cat "$stderr_path" || true
+            fi
+            exit "$status"
+          fi
+
           docker compose exec -T oryvael test -f /workspace/demo/generated.txt
 
       - name: Verify audit chains
