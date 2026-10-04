@@ -5,11 +5,7 @@ services:
       target: runtime
     image: oryvael:dev
     hostname: oryvael
-    cap_add:
-      - SYS_ADMIN
-    security_opt:
-      - seccomp=unconfined
-      - apparmor=unconfined
+    privileged: true
     volumes:
       - oryvael-state:/var/lib/oryvael
       - oryvael-workspace:/workspace
