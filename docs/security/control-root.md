@@ -6,13 +6,14 @@ ORYVAEL treats privileged control artifacts as signed authority, not as trusted 
 
 The reference control verifier is `oryvael-control`.
 
-It currently protects four artifact classes:
+It currently protects five artifact classes:
 - `tool_catalog`;
 - `change_plan`;
 - `principal_policy`;
-- `workspace_registry`.
+- `workspace_registry`;
+- `peer_policy`.
 
-The public file-based entrypoints for supervisor, workspace, tool broker, build and proof enforce root-control verification inside their crate boundary. The Trusted Core CLI retains its own checks as defense in depth.
+The public file-based entrypoints for supervisor, workspace, tool broker, build and proof enforce root-control verification inside their crate boundary. The persistent trusted service also requires a signed `peer_policy` before it accepts local IPC authority.
 
 ## System trust anchor
 
@@ -55,16 +56,19 @@ A root signer entry declares:
 
 Signer identity is therefore the tuple `(id, key_version)`, not only a human-readable name.
 
+`peer_policy` is intentionally a first-class root-authorized kind. Local process-to-principal bindings therefore cannot be edited as ordinary daemon configuration without invalidating the control signature.
+
 ## Key rotation
 
 Rotation is additive before it is subtractive:
 
 1. publish a root policy with a new active key version;
 2. re-sign authorized control artifacts with the new version;
-3. verify rollout health;
-4. mark the old key version `revoked`;
-5. increase the root policy epoch when the trusted state advances;
-6. perform a controlled restart of the persistent trusted service so it validates, persists and pins the new root.
+3. re-sign the local peer policy when its authority changes;
+4. verify rollout health;
+5. mark the old key version `revoked`;
+6. increase the root policy epoch when the trusted state advances;
+7. perform a controlled restart of the persistent trusted service so it validates, persists and pins the new root and peer policy.
 
 There is intentionally no unauthenticated remote root-reload operation.
 
@@ -99,7 +103,8 @@ Privileged execution rejects:
 - signer not authorized for the artifact kind;
 - artifact hash mismatch;
 - malformed public key/signature;
-- invalid Ed25519 signature.
+- invalid Ed25519 signature;
+- missing, malformed or unauthorized signed peer policy at trusted-service startup.
 
 There is no score or warning path for these failures.
 
@@ -109,13 +114,13 @@ The public file-based APIs of `oryvael-supervisor`, `oryvael-workspace`, `oryvae
 
 An external Rust consumer therefore cannot select the historical unchecked file entrypoint by linking the crate directly.
 
-The Trusted Core CLI still performs its own verification. These duplicate checks are intentional defense in depth rather than the security boundary. High-authority long-lived supervision can instead use `oryvael-service`, which owns a process-lifetime root snapshot and persistent epoch state.
+The Trusted Core CLI still performs its own verification. These duplicate checks are intentional defense in depth rather than the security boundary. High-authority long-lived supervision can instead use `oryvael-service`, which owns a process-lifetime root snapshot, persistent epoch state and signed peer authorization.
 
 ## Verified-byte pinning
 
 A protected pathname is no longer verified and then re-opened by the privileged legacy implementation.
 
-`oryvael-control` now produces a `VerifiedControlArtifact` containing:
+`oryvael-control` produces a `VerifiedControlArtifact` containing:
 - the canonical source path used during acquisition;
 - the exact bytes whose SHA-256 and Ed25519 statement were verified;
 - the verified signer/root metadata;
@@ -123,9 +128,7 @@ A protected pathname is no longer verified and then re-opened by the privileged 
 
 The fields that would permit forging such a token are private to the control crate.
 
-Before invoking the private historical implementation, the enforced front door materializes the authenticated bytes into a private snapshot directory. The artifact and signature sidecar are written with create-new semantics and made read-only. The directory itself is made non-writable before consumption.
-
-The private implementation receives only those snapshot paths. It does not receive the original protected pathname.
+Before invoking a private historical implementation, an enforced front door materializes authenticated bytes into a private snapshot directory. The artifact and signature sidecar are written with create-new semantics and made read-only. The directory itself is made non-writable before consumption.
 
 For request/invocation documents that reference another protected control artifact, the public front door parses the request once, verifies the referenced artifact, rewrites the reference to the pinned snapshot, serializes the normalized request and pins that request as well.
 
@@ -136,28 +139,32 @@ This pattern is applied to:
 - build change plan;
 - proof change plan, including nested proof-to-build provenance evaluation.
 
-The tool broker also copies its legacy catalog trust/signature sidecars into the same pinned catalog snapshot so the existing internal catalog-verification layer remains active as defense in depth.
+The persistent service applies the same principle to governance state: root-policy bytes are pinned once, and `peer_policy` is parsed from the exact bytes verified against that pinned root.
 
-The persistent service applies the same principle to its root: accepted root-policy bytes are pinned once and become the verifier input for the lifetime of the service instance.
+## IPC authority binding
+
+The signed peer policy links kernel-authenticated local process identity to service authority. On Linux the service obtains PID/UID/GID from `SO_PEERCRED`, resolves and hashes `/proc/<pid>/exe`, then requires an exact signed peer binding for UID, GID and executable SHA-256.
+
+That binding separately limits service operations and, for `supervise`, the ORYVAEL principal IDs the process may claim. Possession of a valid signed principal policy alone is therefore insufficient to impersonate that principal through the persistent service.
+
+The trust sequence is:
+
+    root-authorized peer policy
+        -> kernel process identity
+        -> permitted service operation
+        -> root-authorized principal policy
+        -> exact peer/principal binding
+        -> capability/policy enforcement
 
 ## TOCTOU property
 
 Within the intended threat model, replacing or modifying the original protected pathname after verification no longer changes the bytes consumed by the privileged implementation.
 
-A unit test verifies this explicitly:
-1. create and sign a control artifact;
-2. load it as a verified artifact;
-3. replace the original pathname with different bytes;
-4. confirm the verified token still exposes the original bytes;
-5. confirm verification of the modified original path fails;
-6. materialize the verified bytes into a pinned snapshot;
-7. confirm that pinned snapshot still verifies against the root policy.
+Control tests verify source replacement after verification does not alter the pinned authenticated bytes. Trusted-service tests separately verify that replacing the root-policy file while a service is running does not change that instance's verification authority; a controlled restart then applies the new root state.
 
-The trusted-service test suite separately verifies that replacing the root-policy file while a service is running does not change that instance's verification authority; a controlled restart then applies the new root state.
+The snapshot is not claimed to be a kernel-sealed immutable object against arbitrary native code already holding the same trusted host process authority. Such code is already inside the Trusted Computing Base. A future `memfd`/sealed-handle transport can reduce that assumption further.
 
-This closes the previously documented verify-path/reopen-same-path race for protected control artifacts and prevents implicit live root mutation in the persistent service.
-
-The snapshot is not claimed to be a kernel-sealed immutable object against arbitrary native code already holding the same trusted host process authority. Such code is already inside the Trusted Computing Base. A future `memfd`/sealed-handle transport can reduce that assumption further and is tracked as defense in depth rather than as the original pathname TOCTOU defect.
+For IPC identity, current executable hashing uses `/proc/<pid>/exe` after `SO_PEERCRED`. A future pidfd-backed identity path is tracked as additional defense against process-lifecycle races.
 
 ## CI evidence
 
@@ -167,24 +174,25 @@ The integration path installs:
 - key version 1 as revoked;
 - key version 2 as active;
 - policy epoch 2;
-- minimum accepted epoch 2.
+- minimum accepted epoch 2;
+- `peer_policy` as an authorized root control kind.
 
-It signs the static control fixtures, signs dynamically modified negative-test fixtures when those fixtures are intentionally authorized, and verifies that a valid signature from the revoked v1 key is still rejected.
+It signs static control fixtures, signs dynamically modified negative-test fixtures when intentionally authorized, and verifies that a valid signature from the revoked v1 key is still rejected.
 
-The `direct_crate_control` integration test bypasses the CLI intentionally and calls the supervisor, workspace, tool-broker, build and proof crates directly with unsigned privileged control artifacts. Every public file-based API must fail closed with a control-verification error.
+The `direct_crate_control` integration test bypasses the CLI intentionally and requires unsigned privileged control artifacts to fail closed at public crate boundaries.
 
-Trusted-service tests additionally exercise restart-persistent epoch state, rollback rejection, Unix-socket verification, persistent service audit chaining and process-lifetime pinned-root behavior.
+Trusted-service tests exercise restart-persistent epoch state, rollback rejection, `SO_PEERCRED`, signed peer authorization, unbound-peer rejection, principal spoof rejection, service audit attribution and process-lifetime pinned-root behavior.
 
 The complete sandbox/release workflow also runs through the pinned-byte front doors, including Git workspace provisioning, Python/Rust tool brokers, independent verifier evidence, reproducible builds, C2 proof and signed C3 release authorization.
 
 ## Remaining hardening
 
-Root ownership and file-backed monotonic epoch persistence are now implemented in the persistent Trusted Supervisor/Audit Service. The next boundary is authenticated IPC and broader audit ownership rather than per-process root loading.
+Root ownership, file-backed monotonic epoch persistence and kernel-authenticated local peer/principal binding are now implemented in the persistent Trusted Supervisor/Audit Service.
 
 Additional defense-in-depth work includes:
-- Unix peer credential authentication and principal-to-peer binding;
+- pidfd-backed peer executable identity and process-lifecycle hardening;
 - migration of remaining component journals into authenticated single-owner audit ingestion plus external checkpoints;
 - sealed `memfd` or equivalent kernel-handle transport for verified control bytes;
 - TPM/secure-element backed monotonic epoch state;
-- threshold/multi-party authorization for changes to the highest-authority root policy;
+- threshold/multi-party authorization for the highest-authority root policy;
 - independent recovery-key procedures and root compromise drills.
