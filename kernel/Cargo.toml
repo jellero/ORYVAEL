@@ -1,11 +1,16 @@
 [package]
 name = "oryvael-kernel"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 publish = false
+autobins = false
 
 # Keep the bare-metal kernel isolated from the host-side trusted-core workspace.
 [workspace]
+
+[[bin]]
+name = "oryvael-kernel"
+path = "src/stage2_main.rs"
 
 [profile.dev]
 panic = "abort"
