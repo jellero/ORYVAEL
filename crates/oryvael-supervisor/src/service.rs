@@ -217,11 +217,10 @@ impl TrustedService {
             ]),
         )?;
 
-        let mut served = 0usize;
-        for connection in listener.incoming() {
+        for (index, connection) in listener.incoming().enumerate() {
             let stream = connection?;
             self.serve_connection(stream)?;
-            served += 1;
+            let served = index + 1;
             if max_requests.is_some_and(|limit| served >= limit) {
                 break;
             }
@@ -639,7 +638,7 @@ fn persist_minimum_epoch(path: &Path, epoch: u64) -> Result<(), ServiceError> {
         .create_new(true)
         .write(true)
         .open(&temporary)?;
-    write!(file, "{epoch}\n")?;
+    writeln!(file, "{epoch}")?;
     file.sync_all()?;
     fs::set_permissions(&temporary, fs::Permissions::from_mode(0o600))?;
     fs::rename(&temporary, path)?;
