@@ -21,7 +21,7 @@ import json
 import sys
 
 old_public, active_public, output = sys.argv[1:]
-kinds = ["tool_catalog", "change_plan", "principal_policy", "workspace_registry"]
+kinds = ["tool_catalog", "change_plan", "principal_policy", "workspace_registry", "peer_policy"]
 policy = {
     "version": 1,
     "epoch": 2,
