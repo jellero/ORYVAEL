@@ -8,13 +8,14 @@ mod accounts;
 mod arch;
 mod boot;
 mod console;
+mod graphics;
 mod io;
 mod memory;
 mod network;
 mod ssh_server;
 mod userspace;
 
-use boot::{EfiHandle, EfiStatus};
+use boot::{BootGraphics, EfiHandle, EfiStatus};
 use memory::{FrameAllocator, KernelHeap, PageTables};
 
 #[unsafe(export_name = "efi_main")]
@@ -37,6 +38,10 @@ pub extern "efiapi" fn efi_main(image_handle: EfiHandle, system_table: *mut c_vo
         io::serial_write("ORYVAEL: invalid UEFI system table\r\n");
         return 1;
     };
+
+    // Capture graphics state and reserve a backbuffer while Boot Services are
+    // still live. Failure is non-fatal: serial remains the recovery console.
+    let graphics_boot = unsafe { boot::prepare_graphics(system_table) };
 
     // SAFETY: image handle and boot-services table are supplied by UEFI.
     let boot_map = match unsafe { boot::detach_firmware(image_handle, boot_services) } {
@@ -88,6 +93,8 @@ pub extern "efiapi" fn efi_main(image_handle: EfiHandle, system_table: *mut c_vo
     boot_info("Syscall gateway", "int 0x80 / DPL3");
     boot_info_hex("Userspace base", userspace::USER_CODE_VA);
 
+    initialize_graphics(graphics_boot, &page_tables);
+
     let Some(user) = userspace::prepare_and_run(&mut page_tables) else {
         io::serial_write("ORYVAEL: userspace bootstrap failed\r\n");
         return 5;
@@ -115,6 +122,54 @@ pub extern "efiapi" fn efi_main(image_handle: EfiHandle, system_table: *mut c_vo
     io::serial_write("\r\n\x1b[1;32mORYVAEL SYSTEM READY\x1b[0m\r\n");
 
     console::run(&mut frames, &mut heap, &page_tables, &boot_map)
+}
+
+fn initialize_graphics(graphics_boot: Option<BootGraphics>, page_tables: &PageTables) {
+    let Some(info) = graphics_boot else {
+        boot_warn("No supported UEFI GOP framebuffer found");
+        return;
+    };
+
+    if !graphics_mapping_available(page_tables, info.framebuffer_base, info.framebuffer_size) {
+        boot_warn("GOP framebuffer is outside the inherited kernel mapping");
+        return;
+    }
+    if info.backbuffer_base != 0
+        && !graphics_mapping_available(page_tables, info.backbuffer_base, info.backbuffer_size)
+    {
+        boot_warn("Graphics backbuffer is outside the inherited kernel mapping");
+        return;
+    }
+
+    let Some(mut display) = graphics::Graphics::new(info) else {
+        boot_warn("GOP mode is unsupported by the native graphics engine");
+        return;
+    };
+
+    boot_ok("Native graphics engine online");
+    boot_info_u64("Display width", display.width() as u64);
+    boot_info_u64("Display height", display.height() as u64);
+    boot_info(
+        "Graphics buffering",
+        if display.uses_backbuffer() {
+            "software backbuffer"
+        } else {
+            "direct framebuffer"
+        },
+    );
+    graphics::run_boot_animation(&mut display);
+    boot_ok("Framebuffer animation self-test complete");
+}
+
+fn graphics_mapping_available(page_tables: &PageTables, base: u64, size: usize) -> bool {
+    if base == 0 || size == 0 {
+        return false;
+    }
+    let Some(last) = base.checked_add(size.saturating_sub(1) as u64) else {
+        return false;
+    };
+    page_tables.translate_kernel_va(base).is_some()
+        && page_tables.translate_kernel_va(last).is_some()
 }
 
 fn boot_ok(message: &str) {
