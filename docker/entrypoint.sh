@@ -88,7 +88,9 @@ oryvael control-verify \
 
 case "${1:-serve}" in
     serve)
-        shift || true
+        if [ "$#" -gt 0 ]; then
+            shift
+        fi
         exec oryvael-service serve \
             --socket "$SOCKET_PATH" \
             --root-policy "$ROOT_POLICY" \
