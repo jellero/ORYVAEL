@@ -1,0 +1,56 @@
+name: Bare Metal OS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot-x86_64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host-side image and VM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            dosfstools \
+            mtools \
+            ovmf \
+            qemu-system-x86
+
+      - name: Build ORYVAEL bare-metal image
+        run: ./scripts/build-os.sh
+
+      - name: Boot ORYVAEL and verify firmware handoff
+        shell: bash
+        run: |
+          set +e
+          timeout 12s ./scripts/run-os.sh >boot.log 2>&1
+          status=$?
+          set -e
+
+          cat boot.log
+
+          if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
+            echo "QEMU failed with status $status" >&2
+            exit "$status"
+          fi
+
+          grep -F "ORYVAEL: firmware boot services detached" boot.log
+          grep -F "ORYVAEL: bare-metal kernel online" boot.log
+          grep -F "ORYVAEL: no Linux kernel" boot.log
+
+      - name: Archive boot image
+        uses: actions/upload-artifact@v4
+        with:
+          name: oryvael-x86_64-uefi
+          path: |
+            dist/oryvael-x86_64-uefi.img
+            dist/BOOTX64.EFI

@@ -1,0 +1,14 @@
+[package]
+name = "oryvael-kernel"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+# Keep the bare-metal kernel isolated from the host-side trusted-core workspace.
+[workspace]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

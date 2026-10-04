@@ -1,25 +1,17 @@
 # ADR-0001: Linux-first implementation
 
-Status: Accepted for prototype
+Status: Superseded by ADR-0005 for the product runtime architecture
 
 ## Context
 
 ORYVAEL must validate AI governance, capability mediation, evidence and update semantics. Building a general-purpose kernel first would make hardware enablement dominate the project.
 
-## Decision
+## Historical decision
 
-Use Linux as the initial substrate and keep ORYVAEL security/application contracts above Linux-specific mechanisms.
+Linux was selected as an initial prototype substrate so governance, policy, evidence and release semantics could be exercised quickly.
 
-## Consequences
+## Current interpretation
 
-Positive:
-- immediate hardware ecosystem;
-- namespaces/cgroups/seccomp/Landlock/eBPF are available;
-- faster system prototype.
+The Linux implementation is retained only as a host-side/reference prototype. It is not an acceptable ORYVAEL OS runtime foundation and does not define the product kernel or userland boundary.
 
-Negative:
-- Linux ambient-authority concepts may leak into design;
-- TCB remains large;
-- some capability semantics require user-space mediation.
-
-Review after Mobile prototype evidence.
+ADR-0005 establishes the current product direction: an ORYVAEL-owned bare-metal kernel and userland with no Linux kernel underneath.
