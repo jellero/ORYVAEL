@@ -12,7 +12,8 @@
         "process.isolation",
         "memory.virtual",
         "device.access",
-        "ipc.peer-credentials"
+        "ipc.peer-credentials",
+        "ipc.peer-pidfd"
       ]
     },
     {
@@ -115,7 +116,8 @@
         "process.isolation",
         "workspace.mount",
         "audit.append",
-        "ipc.peer-credentials"
+        "ipc.peer-credentials",
+        "ipc.peer-pidfd"
       ],
       "capabilities_exposed": [
         "worker.supervise",
@@ -125,6 +127,8 @@
         "verification.telemetry",
         "supervisor.lifecycle.audit",
         "ipc.peer.authenticate",
+        "ipc.peer-lifecycle.pin",
+        "ipc.peer-executable.revalidate",
         "ipc.operation.authorize",
         "ipc.principal.bind",
         "peer-policy.verify"
