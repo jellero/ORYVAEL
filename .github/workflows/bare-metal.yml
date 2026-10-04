@@ -1,0 +1,94 @@
+name: Bare Metal OS
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot-x86_64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host-side image and VM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            dosfstools \
+            mtools \
+            ovmf \
+            qemu-system-x86
+
+      - name: Build ORYVAEL bare-metal image
+        run: ./scripts/build-os.sh
+
+      - name: Boot ORYVAEL and verify native userspace
+        shell: bash
+        run: |
+          set +e
+          {
+            sleep 5
+            printf 'help\r'
+            sleep 0.2
+            printf 'vm\r'
+            sleep 0.2
+            printf 'ps\r'
+            sleep 0.2
+            printf 'fs\r'
+            sleep 0.2
+            printf 'ipc\r'
+            sleep 0.2
+            printf 'mem\r'
+            sleep 0.2
+            printf 'uptime\r'
+            sleep 0.2
+            printf 'about\r'
+          } | timeout 15s ./scripts/run-os.sh >boot.log 2>&1
+          status=${PIPESTATUS[1]}
+          set -e
+
+          cat boot.log
+
+          if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
+            echo "QEMU failed with status $status" >&2
+            exit "$status"
+          fi
+
+          grep -F "ORYVAEL: firmware boot services detached" boot.log
+          grep -F "ORYVAEL: physical allocator online" boot.log
+          grep -F "ORYVAEL: kernel heap online" boot.log
+          grep -F "ORYVAEL: page tables online cr3=" boot.log
+          grep -F "ORYVAEL: exceptions online vectors=32" boot.log
+          grep -F "ORYVAEL: timer interrupts online hz=100" boot.log
+          grep -F "ORYVAEL: userspace mappings online base=" boot.log
+          grep -F "ORYVAEL: syscall console online vector=0x80" boot.log
+          grep -F "ORYVAEL: userspace init entering ring3" boot.log
+          grep -F "ORYVAEL: ring3 init online" boot.log
+          grep -F "ORYVAEL: capability IPC roundtrip value=42" boot.log
+          grep -F "ORYVAEL: ramfs read /hello bytes=" boot.log
+          grep -F "hello from ORYVAEL ramfs" boot.log
+          grep -E 'ORYVAEL: init exited code=0 preemptions=[1-9][0-9]*' boot.log
+          grep -E 'ORYVAEL: scheduler online runnable=0 completed=1 ring3_preemptions=[1-9][0-9]*' boot.log
+          grep -F "ORYVAEL: native minimal OS ready" boot.log
+          grep -F "commands: help mem uptime alloc vm ps fs ipc clear about reboot" boot.log
+          grep -E 'vm: oryvael_cr3=0x[0-9a-f]+ user_base=0x[0-9a-f]+' boot.log
+          grep -E 'process: init state=exited code=0 ring3_preemptions=[1-9][0-9]*' boot.log
+          grep -F "ramfs: /hello -> hello from ORYVAEL ramfs" boot.log
+          grep -F "ipc: handle=0x1001 full=0 last_value=42" boot.log
+          grep -F "memory: conventional_free_pages=" boot.log
+          grep -E 'uptime: ticks=[1-9][0-9]* seconds=[0-9]+' boot.log
+          grep -F "ORYVAEL native OS base: own CR3, exceptions, ring3, syscalls, capability IPC, ramfs" boot.log
+
+      - name: Archive boot image
+        uses: actions/upload-artifact@v4
+        with:
+          name: oryvael-x86_64-uefi
+          path: |
+            dist/oryvael-x86_64-uefi.img
+            dist/BOOTX64.EFI
