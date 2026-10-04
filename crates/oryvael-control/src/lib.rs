@@ -22,6 +22,7 @@ pub enum ControlKind {
     ChangePlan,
     PrincipalPolicy,
     WorkspaceRegistry,
+    PeerPolicy,
 }
 
 impl ControlKind {
@@ -31,6 +32,7 @@ impl ControlKind {
             "change_plan" => Ok(Self::ChangePlan),
             "principal_policy" => Ok(Self::PrincipalPolicy),
             "workspace_registry" => Ok(Self::WorkspaceRegistry),
+            "peer_policy" => Ok(Self::PeerPolicy),
             other => Err(ControlError::UnknownKind(other.into())),
         }
     }
@@ -41,6 +43,7 @@ impl ControlKind {
             Self::ChangePlan => "change_plan",
             Self::PrincipalPolicy => "principal_policy",
             Self::WorkspaceRegistry => "workspace_registry",
+            Self::PeerPolicy => "peer_policy",
         }
     }
 }
