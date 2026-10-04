@@ -264,9 +264,8 @@ struct PeerIdentity {
 impl PeerIdentity {
     fn capture(stream: &UnixStream) -> Result<Self, ServiceError> {
         let credentials = peer_credentials(stream)?;
-        let pid = u32::try_from(credentials.pid).map_err(|_| {
-            ServiceError::Protocol(format!("invalid peer pid {}", credentials.pid))
-        })?;
+        let pid = u32::try_from(credentials.pid)
+            .map_err(|_| ServiceError::Protocol(format!("invalid peer pid {}", credentials.pid)))?;
         let proc_exe = PathBuf::from(format!("/proc/{pid}/exe"));
         let executable_path = fs::read_link(&proc_exe)?;
         let executable_sha256 = sha256_file(&proc_exe)?;
@@ -340,9 +339,15 @@ impl TrustedService {
                     self.root.policy.epoch.to_string(),
                 ),
                 ("minimum_epoch".into(), self.root.minimum_epoch.to_string()),
-                ("peer_policy_sha256".into(), self.peers.artifact_sha256.clone()),
+                (
+                    "peer_policy_sha256".into(),
+                    self.peers.artifact_sha256.clone(),
+                ),
                 ("peer_policy_signer".into(), self.peers.signer_id.clone()),
-                ("peer_policy_key_version".into(), self.peers.key_version.to_string()),
+                (
+                    "peer_policy_key_version".into(),
+                    self.peers.key_version.to_string(),
+                ),
             ]),
         )?;
 
@@ -924,11 +929,7 @@ fn validate_peer_policy(policy: &PeerPolicy) -> Result<(), ServiceError> {
                 binding.id
             )));
         }
-        if !identities.insert((
-            binding.uid,
-            binding.gid,
-            binding.executable_sha256.as_str(),
-        )) {
+        if !identities.insert((binding.uid, binding.gid, binding.executable_sha256.as_str())) {
             return Err(ServiceError::InvalidPeerPolicy(format!(
                 "duplicate peer identity in binding {}",
                 binding.id
@@ -1160,11 +1161,8 @@ mod tests {
         identity_override: Option<(u32, u32, String)>,
     ) -> PathBuf {
         let identity = current_peer_identity();
-        let (uid, gid, executable_sha256) = identity_override.unwrap_or((
-            identity.uid,
-            identity.gid,
-            identity.executable_sha256,
-        ));
+        let (uid, gid, executable_sha256) =
+            identity_override.unwrap_or((identity.uid, identity.gid, identity.executable_sha256));
         let policy = PeerPolicy {
             version: 1,
             bindings: vec![PeerBinding {
@@ -1177,16 +1175,13 @@ mod tests {
             }],
         };
         let path = dir.join("peer-policy.json");
-        fs::write(&path, serde_json::to_vec(&policy).expect("peer policy json"))
-            .expect("peer policy");
-        let signature = sign_from_files(
-            key_path,
-            "root/test",
-            1,
-            ControlKind::PeerPolicy,
+        fs::write(
             &path,
+            serde_json::to_vec(&policy).expect("peer policy json"),
         )
-        .expect("peer signature");
+        .expect("peer policy");
+        let signature = sign_from_files(key_path, "root/test", 1, ControlKind::PeerPolicy, &path)
+            .expect("peer signature");
         fs::write(
             signature_sidecar_path(&path),
             serde_json::to_vec(&signature).expect("peer signature json"),
@@ -1219,13 +1214,8 @@ mod tests {
     fn epoch_persists_across_restart_and_blocks_rollback() {
         let dir = temp_dir("epoch");
         let (root_path, key_path) = write_root(&dir, 2, SignerStatus::Active);
-        let peer_path = write_peer_policy(
-            &dir,
-            &key_path,
-            vec![PeerOperation::Status],
-            vec![],
-            None,
-        );
+        let peer_path =
+            write_peer_policy(&dir, &key_path, vec![PeerOperation::Status], vec![], None);
         let service_config = config(&dir, root_path.clone(), peer_path);
         let service = TrustedService::open(service_config.clone()).expect("service epoch 2");
         assert_eq!(service.status().minimum_epoch, 2);
@@ -1294,10 +1284,12 @@ mod tests {
                 && record.event.metadata.contains_key("peer_pid")
                 && record.event.metadata.contains_key("peer_executable_sha256")
         }));
-        assert!(ledger
-            .records()
-            .iter()
-            .any(|record| record.event.action == "control.verify"));
+        assert!(
+            ledger
+                .records()
+                .iter()
+                .any(|record| record.event.action == "control.verify")
+        );
     }
 
     #[test]
