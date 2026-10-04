@@ -10,7 +10,7 @@ Requirements:
 
 - Docker Engine with Compose v2;
 - a Linux host, or Docker Desktop with a Linux VM;
-- permission for the container to create nested namespaces.
+- permission to run the ORYVAEL development container in privileged mode so the supervisor can create its nested namespace and mount sandbox.
 
 Run:
 
@@ -80,11 +80,11 @@ docker compose down -v
 
 The next startup creates a new development root key and root policy.
 
-## Why the extra Docker permissions exist
+## Why privileged mode is required here
 
-The supervisor builds its sandbox with `unshare`, Bubblewrap and resource limits. Docker's default seccomp/AppArmor policy normally blocks part of that nested namespace/mount sequence.
+The current supervisor builds its sandbox with `unshare`, Bubblewrap, a new PID namespace, a fresh `/proc` mount and resource limits. A normal Docker container, including one with only `SYS_ADMIN`, can still reject Bubblewrap's nested `/proc` mount with `Operation not permitted`.
 
-The development Compose profile therefore adds `SYS_ADMIN` and disables the container seccomp/AppArmor profiles. This is a broad host-facing permission and must not be treated as the final ORYVAEL deployment model.
+The development Compose profile therefore uses `privileged: true`. This gives the outer container broad host-facing authority and must not be treated as the final ORYVAEL deployment model. ORYVAEL's inner Bubblewrap sandbox still applies to the supervised job, but the outer Docker container itself is privileged.
 
 The container deliberately does **not** mount `/var/run/docker.sock` and does not delegate Docker daemon authority to the supervised workload.
 
