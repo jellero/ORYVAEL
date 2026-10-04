@@ -41,17 +41,25 @@ Produces compilation, test, fuzz, property, static-analysis, dependency, archite
 
 Filesystem, network, secrets, display/audio, telemetry, updater and application lifecycle brokers.
 
+The native system-service layer is still under construction. Existing Linux-hosted trusted-core services are reference/prototype implementations for governance, policy, proof and audit semantics; they are not part of the ORYVAEL product runtime boundary.
+
 ## Application Runtime
 
-Applications execute with manifest-declared capabilities. Native, WASM and container workloads may coexist but privileged access maps to the same policy contract.
+Applications execute with manifest-declared capabilities. Native, WASM and container-style workloads may coexist as product profiles evolve, but privileged access maps to the same capability and policy contract.
 
 ## Kernel and Hardware
 
-The initial substrate is Linux. Kernel responsibilities remain deterministic: scheduling, memory, IPC primitives, isolation, device access and process lifecycle.
+ADR-0005 defines ORYVAEL as a bare-metal operating system with its own kernel and userland and supersedes the earlier Linux-first runtime direction.
+
+The initial hardware target is x86_64 with UEFI used only for machine handoff. After `ExitBootServices`, ORYVAEL owns execution below the system-service boundary. Kernel responsibilities include memory management, interrupt handling, scheduling, IPC primitives, capability enforcement, isolation, device access and process lifecycle.
+
+The current native foundation owns CR3 at the PML4 level, provides fresh ring-3 mappings, installs GDT/TSS and architectural exception gates, runs a 100 Hz timer interrupt path, exposes a DPL3 syscall gate and executes a first user payload at CPL3. During page-table migration, inherited lower-level supervisor mappings remain temporarily beneath the ORYVAEL-owned PML4 root.
+
+Linux, macOS and Windows remain valid development hosts for compilation, image construction and virtualization. Host facilities are outside the ORYVAEL runtime and trust boundary.
 
 ## Critical control-flow rule
 
-AI requests privileged actions. It does not directly mutate privileged host state.
+AI requests privileged actions. It does not directly mutate privileged system state.
 
 ~~~
 AI request
