@@ -1,0 +1,143 @@
+name: Trusted Service
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-peer-auth:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build trusted service and root-control CLI
+        run: |
+          cargo build --locked -p oryvael-cli
+          cargo build --locked -p oryvael-supervisor --bin oryvael-service
+
+      - name: Install ephemeral signed root controls
+        run: bash scripts/ci/setup-control-root.sh ./target/debug/oryvael
+
+      - name: Create signed peer policy for exact service client binary
+        run: |
+          client_sha="$(sha256sum ./target/debug/oryvael-service | awk '{print $1}')"
+          uid="$(id -u)"
+          gid="$(id -g)"
+
+          python - "$client_sha" "$uid" "$gid" <<'PY'
+          import json
+          import sys
+
+          client_sha, uid, gid = sys.argv[1:]
+          policy = {
+              "version": 1,
+              "bindings": [
+                  {
+                      "id": "ci/oryvael-service-client",
+                      "uid": int(uid),
+                      "gid": int(gid),
+                      "executable_sha256": client_sha,
+                      "operations": ["status"],
+                      "principals": [],
+                  }
+              ],
+          }
+          with open("/tmp/oryvael-peer-policy.json", "w", encoding="utf-8") as handle:
+              json.dump(policy, handle, indent=2)
+              handle.write("\n")
+          PY
+
+          ./target/debug/oryvael control-sign \
+            --private-key "$ORYVAEL_CONTROL_TEST_KEY" \
+            --signer-id governance/ci \
+            --key-version 2 \
+            --kind peer_policy \
+            --artifact /tmp/oryvael-peer-policy.json \
+            > /tmp/oryvael-peer-policy.json.control.json
+
+          ./target/debug/oryvael control-verify \
+            --root-policy /etc/oryvael/root-policy.json \
+            --kind peer_policy \
+            --artifact /tmp/oryvael-peer-policy.json
+
+      - name: Verify authenticated binary and reject same-UID foreign executable
+        run: |
+          rm -f /tmp/oryvael-trusted.sock /tmp/oryvael-trusted-audit.jsonl
+
+          ./target/debug/oryvael-service serve \
+            --socket /tmp/oryvael-trusted.sock \
+            --root-policy /etc/oryvael/root-policy.json \
+            --minimum-epoch /etc/oryvael/root-policy.min-epoch \
+            --peer-policy /tmp/oryvael-peer-policy.json \
+            --audit /tmp/oryvael-trusted-audit.jsonl \
+            --max-requests 2 \
+            > /tmp/oryvael-service.stdout \
+            2> /tmp/oryvael-service.stderr &
+          service_pid=$!
+
+          for _ in $(seq 1 100); do
+            test -S /tmp/oryvael-trusted.sock && break
+            sleep 0.05
+          done
+          test -S /tmp/oryvael-trusted.sock
+
+          ./target/debug/oryvael-service status \
+            --socket /tmp/oryvael-trusted.sock \
+            > /tmp/oryvael-service-status.json
+
+          python - <<'PY'
+          import json
+          import socket
+
+          request = json.dumps({"request": "status"}).encode()
+          client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+          client.connect("/tmp/oryvael-trusted.sock")
+          client.sendall(request)
+          client.shutdown(socket.SHUT_WR)
+          response = b""
+          while True:
+              chunk = client.recv(65536)
+              if not chunk:
+                  break
+              response += chunk
+          client.close()
+
+          payload = json.loads(response)
+          assert payload["response"] == "error", payload
+          assert payload["code"] == "peer_authentication_failed", payload
+          PY
+
+          wait "$service_pid"
+
+          ./target/debug/oryvael audit-verify /tmp/oryvael-trusted-audit.jsonl
+
+          python - <<'PY'
+          import json
+
+          with open("/tmp/oryvael-service-status.json", "r", encoding="utf-8") as handle:
+              status = json.load(handle)
+          assert status["response"] == "status"
+          assert status["status"]["version"] == "oryvael-trusted-service/2"
+          assert status["status"]["peer_bindings"] == 1
+
+          with open("/tmp/oryvael-trusted-audit.jsonl", "r", encoding="utf-8") as handle:
+              events = [json.loads(line)["event"] for line in handle if line.strip()]
+
+          actions = [event["action"] for event in events]
+          assert "ipc.peer.authenticated" in actions
+          assert "ipc.operation.allowed" in actions
+          assert "ipc.peer.denied" in actions
+          assert actions[0] == "service.started"
+          assert actions[-1] == "service.stopped"
+
+          authenticated = next(
+              event for event in events if event["action"] == "ipc.peer.authenticated"
+          )
+          assert authenticated["metadata"].get("peer_binding") == "ci/oryvael-service-client"
+          assert authenticated["metadata"].get("peer_pid")
+          assert authenticated["metadata"].get("peer_executable_sha256")
+          PY
