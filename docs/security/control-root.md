@@ -24,6 +24,8 @@ An explicit `ORYVAEL_ROOT_POLICY` override exists for controlled development and
 
 The root policy contains only public verification material and authorization metadata. Private signing keys are not part of the runtime policy and must not be stored in the repository or an AI-writable workspace.
 
+The persistent `oryvael-service` path loads the root once at service startup, advances the persistent minimum epoch if necessary and pins the exact accepted root-policy bytes for the lifetime of that service instance. A root file edited after startup does not silently change the authority of the running service.
+
 ## Signed artifact statement
 
 Every protected artifact has a detached sidecar:
@@ -61,7 +63,10 @@ Rotation is additive before it is subtractive:
 2. re-sign authorized control artifacts with the new version;
 3. verify rollout health;
 4. mark the old key version `revoked`;
-5. increase the root policy epoch when the trusted state advances.
+5. increase the root policy epoch when the trusted state advances;
+6. perform a controlled restart of the persistent trusted service so it validates, persists and pins the new root.
+
+There is intentionally no unauthenticated remote root-reload operation.
 
 A statement signed with a revoked key is rejected even when its cryptographic signature is mathematically valid.
 
@@ -73,11 +78,13 @@ System default:
 
     /etc/oryvael/root-policy.min-epoch
 
-Development/test override:
+Development/test override for direct verifier paths:
 
     ORYVAEL_ROOT_POLICY_MIN_EPOCH
 
 A root policy whose epoch is below the trusted minimum is rejected. This prevents an attacker from restoring an older policy in which a compromised key was still active.
+
+The persistent trusted service owns the reference file-backed epoch lifecycle: it reads the minimum at startup, rejects rollback and advances a higher epoch using create-new temporary state, file sync, atomic rename and parent-directory sync before accepting requests.
 
 The minimum epoch must be stored in a location whose integrity is at least as strong as the root policy. A production implementation should place this state in TPM/secure-element backed storage or another monotonic trusted-state mechanism where available.
 
@@ -102,7 +109,7 @@ The public file-based APIs of `oryvael-supervisor`, `oryvael-workspace`, `oryvae
 
 An external Rust consumer therefore cannot select the historical unchecked file entrypoint by linking the crate directly.
 
-The Trusted Core CLI still performs its own verification. These duplicate checks are intentional defense in depth rather than the security boundary.
+The Trusted Core CLI still performs its own verification. These duplicate checks are intentional defense in depth rather than the security boundary. High-authority long-lived supervision can instead use `oryvael-service`, which owns a process-lifetime root snapshot and persistent epoch state.
 
 ## Verified-byte pinning
 
@@ -131,6 +138,8 @@ This pattern is applied to:
 
 The tool broker also copies its legacy catalog trust/signature sidecars into the same pinned catalog snapshot so the existing internal catalog-verification layer remains active as defense in depth.
 
+The persistent service applies the same principle to its root: accepted root-policy bytes are pinned once and become the verifier input for the lifetime of the service instance.
+
 ## TOCTOU property
 
 Within the intended threat model, replacing or modifying the original protected pathname after verification no longer changes the bytes consumed by the privileged implementation.
@@ -144,7 +153,9 @@ A unit test verifies this explicitly:
 6. materialize the verified bytes into a pinned snapshot;
 7. confirm that pinned snapshot still verifies against the root policy.
 
-This closes the previously documented verify-path/reopen-same-path race for protected control artifacts.
+The trusted-service test suite separately verifies that replacing the root-policy file while a service is running does not change that instance's verification authority; a controlled restart then applies the new root state.
+
+This closes the previously documented verify-path/reopen-same-path race for protected control artifacts and prevents implicit live root mutation in the persistent service.
 
 The snapshot is not claimed to be a kernel-sealed immutable object against arbitrary native code already holding the same trusted host process authority. Such code is already inside the Trusted Computing Base. A future `memfd`/sealed-handle transport can reduce that assumption further and is tracked as defense in depth rather than as the original pathname TOCTOU defect.
 
@@ -162,13 +173,17 @@ It signs the static control fixtures, signs dynamically modified negative-test f
 
 The `direct_crate_control` integration test bypasses the CLI intentionally and calls the supervisor, workspace, tool-broker, build and proof crates directly with unsigned privileged control artifacts. Every public file-based API must fail closed with a control-verification error.
 
+Trusted-service tests additionally exercise restart-persistent epoch state, rollback rejection, Unix-socket verification, persistent service audit chaining and process-lifetime pinned-root behavior.
+
 The complete sandbox/release workflow also runs through the pinned-byte front doors, including Git workspace provisioning, Python/Rust tool brokers, independent verifier evidence, reproducible builds, C2 proof and signed C3 release authorization.
 
 ## Remaining hardening
 
-Persistent supervisor/audit services should own root-policy loading, monotonic epoch persistence and verification telemetry rather than relying on per-process file reads.
+Root ownership and file-backed monotonic epoch persistence are now implemented in the persistent Trusted Supervisor/Audit Service. The next boundary is authenticated IPC and broader audit ownership rather than per-process root loading.
 
 Additional defense-in-depth work includes:
+- Unix peer credential authentication and principal-to-peer binding;
+- migration of remaining component journals into authenticated single-owner audit ingestion plus external checkpoints;
 - sealed `memfd` or equivalent kernel-handle transport for verified control bytes;
 - TPM/secure-element backed monotonic epoch state;
 - threshold/multi-party authorization for changes to the highest-authority root policy;
