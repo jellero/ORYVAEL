@@ -140,8 +140,10 @@ oryvael_syscall_interrupt:
     push rcx
     push rbx
     push rax
-    mov rdi, rsp
+    mov rcx, rsp
+    sub rsp, 32
     call oryvael_syscall_dispatch
+    add rsp, 32
     test rax, rax
     jnz .Lsys_exit
     pop rax
@@ -172,6 +174,8 @@ oryvael_syscall_interrupt:
     pop r14
     pop r13
     pop r12
+    pop rsi
+    pop rdi
     pop rbp
     pop rbx
     ret
@@ -180,6 +184,8 @@ oryvael_syscall_interrupt:
 oryvael_enter_user_asm:
     push rbx
     push rbp
+    push rdi
+    push rsi
     push r12
     push r13
     push r14
@@ -189,13 +195,13 @@ oryvael_enter_user_asm:
     mov ds, ax
     mov es, ax
     push 0x1b
-    push rsi
+    push rdx
     pushfq
     pop rax
     or rax, 0x200
     push rax
     push 0x23
-    push rdi
+    push rcx
     iretq
 
 .global oryvael_exception_table
@@ -210,42 +216,43 @@ oryvael_exception_table:
     .quad oryvael_exc_24, oryvael_exc_25, oryvael_exc_26, oryvael_exc_27
     .quad oryvael_exc_28, oryvael_exc_29, oryvael_exc_30, oryvael_exc_31
 
-oryvael_exc_0:  mov edi, 0;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_1:  mov edi, 1;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_2:  mov edi, 2;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_3:  mov edi, 3;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_4:  mov edi, 4;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_5:  mov edi, 5;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_6:  mov edi, 6;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_7:  mov edi, 7;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_8:  mov edi, 8;  mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_9:  mov edi, 9;  xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_10: mov edi, 10; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_11: mov edi, 11; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_12: mov edi, 12; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_13: mov edi, 13; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_14: mov edi, 14; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_15: mov edi, 15; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_16: mov edi, 16; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_17: mov edi, 17; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_18: mov edi, 18; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_19: mov edi, 19; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_20: mov edi, 20; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_21: mov edi, 21; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_22: mov edi, 22; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_23: mov edi, 23; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_24: mov edi, 24; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_25: mov edi, 25; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_26: mov edi, 26; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_27: mov edi, 27; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_28: mov edi, 28; xor esi, esi; jmp oryvael_exc_common
-oryvael_exc_29: mov edi, 29; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_30: mov edi, 30; mov rsi, [rsp]; jmp oryvael_exc_common
-oryvael_exc_31: mov edi, 31; xor esi, esi; jmp oryvael_exc_common
+oryvael_exc_0:  mov ecx, 0;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_1:  mov ecx, 1;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_2:  mov ecx, 2;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_3:  mov ecx, 3;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_4:  mov ecx, 4;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_5:  mov ecx, 5;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_6:  mov ecx, 6;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_7:  mov ecx, 7;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_8:  mov ecx, 8;  mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_9:  mov ecx, 9;  xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_10: mov ecx, 10; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_11: mov ecx, 11; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_12: mov ecx, 12; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_13: mov ecx, 13; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_14: mov ecx, 14; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_15: mov ecx, 15; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_16: mov ecx, 16; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_17: mov ecx, 17; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_18: mov ecx, 18; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_19: mov ecx, 19; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_20: mov ecx, 20; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_21: mov ecx, 21; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_22: mov ecx, 22; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_23: mov ecx, 23; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_24: mov ecx, 24; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_25: mov ecx, 25; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_26: mov ecx, 26; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_27: mov ecx, 27; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_28: mov ecx, 28; xor edx, edx; jmp oryvael_exc_common
+oryvael_exc_29: mov ecx, 29; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_30: mov ecx, 30; mov rdx, [rsp]; jmp oryvael_exc_common
+oryvael_exc_31: mov ecx, 31; xor edx, edx; jmp oryvael_exc_common
 
 oryvael_exc_common:
-    mov rdx, cr2
+    mov r8, cr2
     and rsp, -16
+    sub rsp, 32
     call oryvael_exception_dispatch
 .Lexception_halt:
     cli
