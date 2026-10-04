@@ -136,17 +136,13 @@ fn peer_pidfd(stream: &UnixStream) -> io::Result<OwnedFd> {
         let error = io::Error::last_os_error();
         return Err(io::Error::new(
             error.kind(),
-            format!(
-                "SO_PEERPIDFD is required for trusted IPC peer pinning: {error}"
-            ),
+            format!("SO_PEERPIDFD is required for trusted IPC peer pinning: {error}"),
         ));
     }
     if length as usize != size_of::<c_int>() || raw_pidfd < 0 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "SO_PEERPIDFD returned invalid descriptor {raw_pidfd} with length {length}"
-            ),
+            format!("SO_PEERPIDFD returned invalid descriptor {raw_pidfd} with length {length}"),
         ));
     }
 
