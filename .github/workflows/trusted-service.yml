@@ -121,7 +121,7 @@ jobs:
           with open("/tmp/oryvael-service-status.json", "r", encoding="utf-8") as handle:
               status = json.load(handle)
           assert status["response"] == "status"
-          assert status["status"]["version"] == "oryvael-trusted-service/2"
+          assert status["status"]["version"] == "oryvael-trusted-service/3"
           assert status["status"]["peer_bindings"] == 1
 
           with open("/tmp/oryvael-trusted-audit.jsonl", "r", encoding="utf-8") as handle:
@@ -139,5 +139,6 @@ jobs:
           )
           assert authenticated["metadata"].get("peer_binding") == "ci/oryvael-service-client"
           assert authenticated["metadata"].get("peer_pid")
+          assert authenticated["metadata"].get("peer_pidfd_bound") == "true"
           assert authenticated["metadata"].get("peer_executable_sha256")
           PY
