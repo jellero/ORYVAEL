@@ -84,6 +84,11 @@ jobs:
           grep -F "Virtual memory ownership established" boot.log
           grep -F "Exception and interrupt gates online" boot.log
           grep -F "System clock online at 100 Hz" boot.log
+          grep -F "Native graphics engine online" boot.log
+          grep -E 'Display width: [1-9][0-9]*' boot.log
+          grep -E 'Display height: [1-9][0-9]*' boot.log
+          grep -F "Graphics buffering: software backbuffer" boot.log
+          grep -F "Framebuffer animation self-test complete" boot.log
           grep -F "Userspace address space prepared" boot.log
           grep -F "Capability syscall gateway armed" boot.log
           grep -F "Launching ring-3 init" boot.log
