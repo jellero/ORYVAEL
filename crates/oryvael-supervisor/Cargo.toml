@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [lib]
-path = "src/enforced.rs"
+path = "src/root.rs"
 
 [dependencies]
 oryvael-protocol = { path = "../oryvael-protocol" }
