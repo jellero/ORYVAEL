@@ -38,10 +38,16 @@ Delivered:
 - persistent Unix-socket Trusted Supervisor/Audit Service;
 - process-lifetime pinned root-policy ownership inside the service;
 - atomic persistent monotonic root-policy epoch with restart rollback rejection;
-- single-writer service journal for root verification and supervisor lifecycle telemetry;
-- explicit controlled-restart boundary for root-policy rotation;
+- signed `peer_policy` as a root-authorized control artifact;
+- Linux `SO_PEERCRED` acquisition before request deserialization;
+- UID/GID plus executable-SHA-256 peer binding;
+- per-binding service-operation allowlists;
+- exact peer-to-ORYVAEL-principal binding for supervised execution;
+- peer PID/UID/GID/executable attribution in the service and supervisor audit contexts;
+- single-writer service journal for root verification, IPC authorization and supervisor lifecycle telemetry;
+- explicit controlled-restart boundary for root-policy and peer-policy rotation;
 - real Linux confinement smoke test in CI;
-- negative tests for network self-grant and worker-writable control files.
+- negative tests for network self-grant, worker-writable controls, unbound IPC peers and principal spoofing.
 
 Phase 1 exit criteria and current evidence:
 - Developer AI writes only the task workspace: verified by real sandbox smoke test.
@@ -50,9 +56,11 @@ Phase 1 exit criteria and current evidence:
 - Agent cannot self-grant: verified by requesting host networking under an explicit network deny and requiring rejection.
 - Root epoch survives trusted-service restart and rejects rollback: verified by Trusted Core tests.
 - A running trusted service keeps a stable pinned root until controlled restart: verified by root-replacement test.
+- An unbound local process cannot use trusted-service authority: verified by signed-peer-policy negative test.
+- A bound process cannot claim an ORYVAEL principal absent from its binding: verified before job execution.
 
 Hardening carried into Phase 1.x / Phase 2:
-- authenticated Unix peer identity and principal-to-peer binding;
+- pidfd-backed process/executable identity hardening beyond `/proc/<pid>/exe` hashing;
 - migration of remaining component journals into a single-owner audit ingestion service plus external checkpoints;
 - service manager packaging/hardening and durable job recovery;
 - distribution/hardware compatibility matrix;
@@ -66,7 +74,7 @@ Status: implementation in progress; the reference development-factory path is op
 Delivered foundation:
 - named tool/action catalog with no arbitrary command surface;
 - Ed25519-signed tool catalogs verified fail-closed;
-- common `oryvael-control` root verifier for tool catalogs, change plans, principal policies and workspace registries;
+- common `oryvael-control` root verifier for tool catalogs, change plans, principal policies, workspace registries and signed peer policies;
 - exact control-artifact SHA-256 binding inside detached signatures;
 - versioned root signer identities with artifact-kind authorization;
 - explicit active/revoked key state and rejection of cryptographically valid signatures from revoked key versions;
@@ -74,13 +82,14 @@ Delivered foundation:
 - system root defaults at `/etc/oryvael/root-policy.json` and `/etc/oryvael/root-policy.min-epoch`;
 - persistent Trusted Supervisor service owns and pins root-policy bytes for its process lifetime;
 - persistent service advances root epoch atomically and rejects rollback across restart;
-- service-level verification/lifecycle events are written by one trusted journal owner;
+- root-authorized peer policy binds kernel process identity to trusted-service operations and ORYVAEL principals;
+- service-level root verification, IPC authorization and lifecycle events are written by one trusted journal owner;
 - ephemeral CI roots with no committed private root key;
 - root-control enforcement at public file-based crate boundaries for supervisor, workspace, tool broker, build and proof;
 - direct-crate anti-bypass integration tests requiring unsigned privileged controls to fail closed;
-- verified-byte pinning for privileged control artifacts: protected files are read and verified once, then the same authenticated bytes are materialized into private read-only snapshots consumed by the privileged implementation;
-- nested proof-to-build control verification operates on the pinned signed snapshot rather than re-opening the original mutable control pathname;
-- source-replacement test proving a verified token retains the authenticated bytes after the original pathname is modified;
+- verified-byte pinning for privileged control artifacts;
+- nested proof-to-build control verification on pinned signed snapshots rather than mutable source pathnames;
+- source-replacement test proving a verified token retains authenticated bytes after pathname mutation;
 - immutable change-plan hash binding for brokered execution and verifier evidence;
 - developer actions must be explicitly requested by the plan;
 - Test/Security/Reviewer roles must differ from the producer;
@@ -99,7 +108,7 @@ Delivered foundation:
 - cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- authenticate Unix peers and bind OS/process identity to ORYVAEL principals before broadening trusted-service IPC authority;
+- harden local process identity with pidfd-backed lifecycle semantics;
 - migrate remaining supervisor/workspace/tool/release audit producers to authenticated single-owner audit ingestion and external checkpoints;
 - package and harden the persistent service under the system service manager, including clean restart/recovery behavior;
 - add durable job registry, cancellation and crash recovery without weakening attribution;
