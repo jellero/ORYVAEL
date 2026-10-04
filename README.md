@@ -113,6 +113,31 @@ The initial implementation is Linux-first to validate the control model without 
 
 Trusted reference components are written in Rust with unsafe code forbidden unless a dedicated ADR permits a narrowly reviewed exception.
 
+## Docker development system
+
+The current trusted-core reference can be started as a Docker development system:
+
+```sh
+docker compose up -d --build
+```
+
+Check the trusted service:
+
+```sh
+docker compose exec oryvael \
+  oryvael-service status --socket /run/oryvael/trusted.sock
+```
+
+Check nested sandbox support:
+
+```sh
+docker compose exec oryvael oryvael supervisor-doctor
+```
+
+The Docker profile persists the development root policy, audit state and workspace in named volumes. It grants the container additional namespace/mount authority so Bubblewrap can create the inner sandbox; it is therefore a development profile, not a production deployment boundary.
+
+See `docs/development/docker-quickstart.md` for the confinement demo, audit verification and security notes.
+
 ## Current status
 
 Phase 0 is implemented, the Phase 1 Local Trusted Supervisor is an alpha reference, and Phase 2 is actively implemented. CI exercises the real Linux sandbox, policy-bound Git worktrees, fixed Python and Rust tool profiles, independently attributed Test/Security verification, audited proof packages, locked build/SBOM provenance, reproducible-build vetoes, deterministic release checks and signed C3 approval flow.
