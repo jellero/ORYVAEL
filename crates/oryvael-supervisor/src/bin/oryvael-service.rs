@@ -57,9 +57,7 @@ mod unix_main {
                 print_response(response)?;
             }
             "help" | "--help" | "-h" => print_help(),
-            other => {
-                return Err(format!("unknown command: {other}").into());
-            }
+            other => return Err(format!("unknown command: {other}").into()),
         }
         Ok(())
     }
@@ -96,6 +94,9 @@ mod unix_main {
         }
         if let Some(value) = options.get("minimum-epoch") {
             config.minimum_epoch_path = PathBuf::from(value);
+        }
+        if let Some(value) = options.get("peer-policy") {
+            config.peer_policy_path = PathBuf::from(value);
         }
         if let Some(value) = options.get("audit") {
             config.audit_path = PathBuf::from(value);
@@ -139,7 +140,7 @@ mod unix_main {
         println!(
             "oryvael-service\n\n\
              Commands:\n\
-               serve [--socket PATH] [--root-policy PATH] [--minimum-epoch PATH] [--audit PATH] [--max-requests N]\n\
+               serve [--socket PATH] [--root-policy PATH] [--minimum-epoch PATH] [--peer-policy PATH] [--audit PATH] [--max-requests N]\n\
                status [--socket PATH]\n\
                verify --kind KIND --artifact PATH [--socket PATH]\n\
                supervise --principal PATH --job PATH [--socket PATH]"
