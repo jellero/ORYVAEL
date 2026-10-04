@@ -35,6 +35,11 @@ Delivered:
 - optional prlimit memory/CPU/file-size limits;
 - supervisor host preflight;
 - CLI supervise/doctor commands;
+- persistent Unix-socket Trusted Supervisor/Audit Service;
+- process-lifetime pinned root-policy ownership inside the service;
+- atomic persistent monotonic root-policy epoch with restart rollback rejection;
+- single-writer service journal for root verification and supervisor lifecycle telemetry;
+- explicit controlled-restart boundary for root-policy rotation;
 - real Linux confinement smoke test in CI;
 - negative tests for network self-grant and worker-writable control files.
 
@@ -43,10 +48,13 @@ Phase 1 exit criteria and current evidence:
 - Network deny is enforceable: verified by real socket attempt inside the sandbox.
 - Every privileged operation has an audit ID: verified by audit assertions in CI.
 - Agent cannot self-grant: verified by requesting host networking under an explicit network deny and requiring rejection.
+- Root epoch survives trusted-service restart and rejects rollback: verified by Trusted Core tests.
+- A running trusted service keeps a stable pinned root until controlled restart: verified by root-replacement test.
 
 Hardening carried into Phase 1.x / Phase 2:
-- persistent supervisor daemon/service interface;
-- single-owner centralized audit service and external checkpoints;
+- authenticated Unix peer identity and principal-to-peer binding;
+- migration of remaining component journals into a single-owner audit ingestion service plus external checkpoints;
+- service manager packaging/hardening and durable job recovery;
 - distribution/hardware compatibility matrix;
 - seccomp/Landlock defense in depth;
 - cgroup-v2 accounting and lifecycle cleanup.
@@ -64,6 +72,9 @@ Delivered foundation:
 - explicit active/revoked key state and rejection of cryptographically valid signatures from revoked key versions;
 - monotonic root-policy epoch with anti-rollback minimum state;
 - system root defaults at `/etc/oryvael/root-policy.json` and `/etc/oryvael/root-policy.min-epoch`;
+- persistent Trusted Supervisor service owns and pins root-policy bytes for its process lifetime;
+- persistent service advances root epoch atomically and rejects rollback across restart;
+- service-level verification/lifecycle events are written by one trusted journal owner;
 - ephemeral CI roots with no committed private root key;
 - root-control enforcement at public file-based crate boundaries for supervisor, workspace, tool broker, build and proof;
 - direct-crate anti-bypass integration tests requiring unsigned privileged controls to fail closed;
@@ -88,13 +99,15 @@ Delivered foundation:
 - cryptographically signed, policy-authorized human approval verification for C3/C4 release decisions.
 
 Next deliverables:
-- move root-policy loading and epoch persistence into persistent trusted services;
+- authenticate Unix peers and bind OS/process identity to ORYVAEL principals before broadening trusted-service IPC authority;
+- migrate remaining supervisor/workspace/tool/release audit producers to authenticated single-owner audit ingestion and external checkpoints;
+- package and harden the persistent service under the system service manager, including clean restart/recovery behavior;
+- add durable job registry, cancellation and crash recovery without weakening attribution;
 - evaluate sealed `memfd`/kernel-handle backed control transport as defense in depth beyond the current private read-only snapshot model;
 - evaluate TPM/secure-element backed monotonic epoch storage and root-key recovery procedures;
 - evaluate threshold/multi-party authorization for root-policy and highly privileged catalog changes;
 - replace the bounded fuzz-smoke profile with a coverage-guided fuzz backend while preserving broker isolation;
 - complete concrete Architect and Reviewer workflows around the existing role enforcement;
-- persistent supervisor/audit services with external checkpoints;
 - central metrics, logs and traces;
 - end-to-end C1 generation demo starting from intent and finishing at a packaged artifact without host-admin authority.
 
