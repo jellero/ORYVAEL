@@ -1,11 +1,9 @@
 # ORYVAEL Roadmap
 
-ADR-0005 supersedes the earlier Linux-first product-runtime direction. The roadmap therefore has two coordinated tracks:
-
-- the host-side trusted-core/reference track, which validates governance, policy, audit, proof, release and AI-development-factory semantics;
-- the native ORYVAEL OS track, which owns the product kernel, userland and hardware/runtime boundary.
-
-Linux-hosted components remain valuable as reference implementations and migration sources, but they are not the ORYVAEL product runtime.
+Phases 0-2 describe the Linux-hosted reference implementation used to develop
+and test governance semantics. ADR-0005 establishes the separate bare-metal
+product runtime; host-reference delivery must not be confused with native OS
+delivery.
 
 ## Phase 0 — Architecture foundation
 
@@ -25,9 +23,9 @@ Evidence gate:
 - schemas parse;
 - architecture/system.json is validated in CI.
 
-## Phase 1 — Local Trusted Supervisor reference
+## Phase 1 — Local Trusted Supervisor
 
-Status: alpha implementation complete; hardening continues on the host-side reference path.
+Status: alpha implementation complete; hardening continues.
 
 Delivered:
 - principal identity and external policy input;
@@ -73,12 +71,13 @@ Phase 1 exit criteria and current evidence:
 - A bound process cannot claim an ORYVAEL principal absent from its binding: verified before job execution.
 - Trusted IPC identity is tied to a kernel pidfd and revalidated before dispatch.
 
-Hardening carried into later reference work and native-service migration:
+Hardening carried into Phase 1.x / Phase 2:
 - migration of remaining component journals into a single-owner audit ingestion service plus external checkpoints;
 - service manager packaging/hardening and durable job recovery;
 - optional stronger workload identity/attestation beyond executable hashing;
-- seccomp/Landlock and cgroup-v2 defense in depth on Linux-hosted reference infrastructure;
-- native ORYVAEL equivalents at the system-service and kernel capability boundaries.
+- distribution/hardware compatibility matrix;
+- seccomp/Landlock defense in depth;
+- cgroup-v2 accounting and lifecycle cleanup.
 
 ## Phase 2 — AI Development Factory
 
@@ -123,7 +122,7 @@ Delivered foundation:
 
 Next deliverables:
 - migrate remaining supervisor/workspace/tool/release audit producers to authenticated single-owner audit ingestion and external checkpoints;
-- package and harden the persistent host-side reference service, including clean restart/recovery behavior;
+- package and harden the persistent service under the system service manager, including clean restart/recovery behavior;
 - add durable job registry, cancellation and crash recovery without weakening attribution;
 - evaluate sealed `memfd`/kernel-handle backed control transport as defense in depth beyond the current private read-only snapshot model;
 - evaluate TPM/secure-element backed monotonic epoch storage and root-key recovery procedures;
@@ -132,84 +131,68 @@ Next deliverables:
 - replace the bounded fuzz-smoke profile with a coverage-guided fuzz backend while preserving broker isolation;
 - complete concrete Architect and Reviewer workflows around the existing role enforcement;
 - central metrics, logs and traces;
-- end-to-end C1 generation demo starting from intent and finishing at a packaged artifact without host-admin authority;
-- define migration contracts for moving trusted-core semantics into native ORYVAEL services.
+- end-to-end C1 generation demo starting from intent and finishing at a packaged artifact without host-admin authority.
 
 Exit:
 - a C1 ORYVAEL component is generated, independently verified and packaged end-to-end without the AI receiving host-admin authority;
 - implementation and verification principals are independently attributable;
-- all tool invocations are capability checked and audited;
-- control, proof and audit semantics are specified strongly enough to port into the native runtime without weakening invariants.
+- all tool invocations are capability checked and audited.
 
-## Phase 3 — Native Kernel Foundation
+## Phase 3 — Native x86_64 OS and Desktop Prototype
 
-Status: implementation in progress; the first x86_64 bare-metal userspace boundary is operational.
+Status: in progress. The bootable native foundation is delivered; the desktop
+and durable system services are not.
 
-Delivered:
-- x86_64 UEFI boot image;
-- firmware memory-map capture and `ExitBootServices` handoff;
-- physical 4 KiB frame allocator;
-- kernel heap;
-- ORYVAEL-owned CR3/PML4 root;
-- fresh ring-3 code/data/stack page-table branch without widening inherited supervisor mappings;
-- GDT and TSS kernel privilege-transition stack;
-- 32 architectural exception gates with fail-closed dispatch;
-- 100 Hz PIT/PIC timer interrupt path;
-- DPL3 syscall gate;
-- first `init` payload at CPL3;
-- timer preemption observation while ring-3 code executes;
-- capability-checked IPC mailbox roundtrip;
-- minimal RAM filesystem and `/hello` read path;
-- recovery kernel console;
-- QEMU/OVMF CI that verifies the native userspace path and archives the boot image.
+Delivered native foundation:
+- x86_64 UEFI boot and firmware-service detachment;
+- Rust `no_std` kernel with owned CR3 root and a CPL3 process;
+- exceptions, timer interrupts, syscall boundary and capability IPC smoke path;
+- RAMFS plus RTL8139/DHCP/ARP/IPv4/ICMP/DNS networking;
+- limited native TCP and Ed25519-authenticated SSHv2 administration;
+- Windows/QEMU launcher with DHCP and host port forwarding.
 
-Next deliverables:
-1. rebuild the complete kernel virtual address space with ORYVAEL-owned lower-level page tables instead of retaining inherited mappings;
-2. add recoverable per-process exception/fault termination;
-3. replace PIT/PIC bootstrap routing with local APIC and IOAPIC;
-4. add kernel threads, saved contexts and context switching among multiple runnable ring-3 processes;
-5. grow the fixed capability mailbox into a kernel object/handle table with rights transfer and blocking IPC;
-6. add storage drivers and a persistent filesystem service;
-7. add framebuffer/graphics input and networking drivers/services;
-8. port governance, audit and root-control semantics from the host reference into native services;
-9. add an ARM64 boot path after the x86_64 kernel contracts stabilize.
-
-Exit:
-- ORYVAEL boots without a host OS beneath it;
-- kernel virtual-memory ownership no longer depends on inherited lower-level firmware mappings;
-- multiple isolated ring-3 processes can be scheduled and terminated independently on faults;
-- capability-bearing IPC is represented by kernel-managed objects/handles rather than fixed test constants;
-- native CI continuously verifies the privilege boundary and core kernel invariants.
-
-## Phase 4 — Immutable Desktop Prototype
-
-Deliver persistent storage, A/B updates, recovery, Desktop shell, app runtime, development workspace, graphics/input/network services and observability dashboards on the native ORYVAEL runtime.
+Remaining:
+- fully native page-table hierarchy and multi-process scheduler;
+- persistent storage, update slots and recovery;
+- framebuffer/input, Desktop shell and application runtime;
+- native policy, audit, approval and AI principal services;
+- observability and fault-injected rollback.
 
 Exit:
 - fault-injected rollback works;
 - app capability UI works;
-- staged test-fleet rollout works;
-- routine desktop operation does not depend on a host operating system beneath ORYVAEL.
+- staged test-fleet rollout works.
 
-## Phase 5 — Desktop Alpha
+## Phase 4 — Desktop Alpha
 
-Deliver defined hardware matrix, GPU/display path, secrets/passkeys, signed apps, user governance console and hardened native system services.
+Deliver hardware matrix, GPU/Wayland path, secrets/passkeys, signed apps and user governance console.
 
 Exit:
 - daily-driver pilot on defined hardware;
-- independent Trusted Core and native-kernel security review;
-- measurable recovery objectives;
-- signed release/update path preserves rollback and human recovery authority.
+- independent Trusted Core security review;
+- measurable recovery objectives.
 
-## Phase 6 — ARM64 Mobile Prototype
+## Phase 5 — ARM64 Mobile Prototype
 
-Deliver ARM64 boot/runtime support, Mobile shell, telephony/sensor/camera brokers, energy/background policy and secure-element integration.
+Deliver Mobile shell, telephony/sensor/camera brokers, energy/background policy and secure-element integration.
 
 Exit:
 - common app/capability contracts work on Desktop and Mobile;
-- continuity transfers state without silently transferring privilege;
-- the same governance, audit and root-control contracts operate across x86_64 Desktop and ARM64 Mobile profiles.
+- continuity transfers state without silently transferring privilege.
+
+## Phase 6 — Native Kernel Maturity
+
+The Linux-versus-custom-kernel product decision is resolved by ADR-0005:
+ORYVAEL owns its kernel. This phase expands the native implementation after the
+x86_64 contracts and ARM64 prototype are stable.
+
+Deliver:
+- multi-core scheduling and production-grade virtual memory;
+- generalized storage, network, USB and power-management frameworks;
+- measurable TCB, performance and energy budgets;
+- hardware-backed roots and verified boot/recovery;
+- formal models and targeted verification for critical authority boundaries.
 
 ## Long-term target
 
-Routine implementation and maintenance may become predominantly AI-operated while C3/C4 authority, root keys, attribution, recovery and release evidence remain explicitly human governed.
+Routine implementation and maintenance may become predominantly AI-operated while C3/C4 authority, root keys, attribution and release evidence remain explicitly human governed.

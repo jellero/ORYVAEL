@@ -33,8 +33,15 @@ pub fn serial_write(text: &str) {
 }
 
 pub fn serial_write_bytes(bytes: &[u8]) {
+    let mut previous = 0u8;
     for &byte in bytes {
+        // COM terminals require CRLF. Ring-3 writes are allowed to use plain
+        // Unix LF, so normalize them at the single serial output boundary.
+        if byte == b'\n' && previous != b'\r' {
+            serial_write_byte(b'\r');
+        }
         serial_write_byte(byte);
+        previous = byte;
     }
 }
 
@@ -111,16 +118,83 @@ impl KeyboardState {
 fn translate_scancode(scan: u8, shift: bool) -> Option<u8> {
     let byte = match scan {
         0x01 => 0x1b,
-        0x02 => if shift { b'!' } else { b'1' },
-        0x03 => if shift { b'@' } else { b'2' },
-        0x04 => if shift { b'#' } else { b'3' },
-        0x05 => if shift { b'$' } else { b'4' },
-        0x06 => if shift { b'%' } else { b'5' },
-        0x07 => if shift { b'^' } else { b'6' },
-        0x08 => if shift { b'&' } else { b'7' },
-        0x09 => if shift { b'*' } else { b'8' },
-        0x0a => if shift { b'(' } else { b'9' },
-        0x0b => if shift { b')' } else { b'0' },
+        0x02 => {
+            if shift {
+                b'!'
+            } else {
+                b'1'
+            }
+        }
+        0x03 => {
+            if shift {
+                b'@'
+            } else {
+                b'2'
+            }
+        }
+        0x04 => {
+            if shift {
+                b'#'
+            } else {
+                b'3'
+            }
+        }
+        0x05 => {
+            if shift {
+                b'$'
+            } else {
+                b'4'
+            }
+        }
+        0x06 => {
+            if shift {
+                b'%'
+            } else {
+                b'5'
+            }
+        }
+        0x07 => {
+            if shift {
+                b'^'
+            } else {
+                b'6'
+            }
+        }
+        0x08 => {
+            if shift {
+                b'&'
+            } else {
+                b'7'
+            }
+        }
+        0x09 => {
+            if shift {
+                b'*'
+            } else {
+                b'8'
+            }
+        }
+        0x0a => {
+            if shift {
+                b'('
+            } else {
+                b'9'
+            }
+        }
+        0x0b => {
+            if shift {
+                b')'
+            } else {
+                b'0'
+            }
+        }
+        0x0c => {
+            if shift {
+                b'_'
+            } else {
+                b'-'
+            }
+        }
         0x0e => 0x08,
         0x0f => b' ',
         0x10 => letter(b'q', shift),
@@ -150,6 +224,13 @@ fn translate_scancode(scan: u8, shift: bool) -> Option<u8> {
         0x30 => letter(b'b', shift),
         0x31 => letter(b'n', shift),
         0x32 => letter(b'm', shift),
+        0x34 => {
+            if shift {
+                b'>'
+            } else {
+                b'.'
+            }
+        }
         0x39 => b' ',
         _ => return None,
     };
@@ -221,6 +302,44 @@ pub unsafe fn inb(port: u16) -> u8 {
             "in al, dx",
             in("dx") port,
             out("al") value,
+            options(nomem, nostack, preserves_flags)
+        )
+    };
+    value
+}
+
+pub unsafe fn outw(port: u16, value: u16) {
+    // SAFETY: caller selects a valid x86 I/O port.
+    unsafe {
+        asm!(
+            "out dx, ax",
+            in("dx") port,
+            in("ax") value,
+            options(nomem, nostack, preserves_flags)
+        )
+    };
+}
+
+pub unsafe fn outl(port: u16, value: u32) {
+    // SAFETY: caller selects a valid x86 I/O port.
+    unsafe {
+        asm!(
+            "out dx, eax",
+            in("dx") port,
+            in("eax") value,
+            options(nomem, nostack, preserves_flags)
+        )
+    };
+}
+
+pub unsafe fn inl(port: u16) -> u32 {
+    let value: u32;
+    // SAFETY: caller selects a valid x86 I/O port.
+    unsafe {
+        asm!(
+            "in eax, dx",
+            in("dx") port,
+            out("eax") value,
             options(nomem, nostack, preserves_flags)
         )
     };

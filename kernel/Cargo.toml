@@ -17,3 +17,9 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
+
+[dependencies]
+embedded-io-async = { version = "0.6", default-features = false }
+rand = { version = "0.8", default-features = false }
+rand_chacha = { version = "0.3", default-features = false }
+zssh = { version = "0.4.2", default-features = false }

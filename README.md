@@ -56,6 +56,7 @@ The user experience differs. The trust model does not.
 
 ## Repository map
 
+- PROJECT_STATUS.md — verified native-runtime snapshot, limitations and next milestones
 - kernel/ — freestanding ORYVAEL bare-metal kernel and native userspace bootstrap
 - docs/vision.md — product vision
 - docs/principles.md — engineering principles
@@ -136,21 +137,34 @@ Boot it in QEMU/OVMF:
 ./scripts/run-os.sh
 ```
 
-The default console is the serial terminal. After the ring-3 init self-test completes, type `help` at the `oryvael>` recovery prompt.
+On Windows, launch the existing image directly in QEMU user-network mode:
+
+```powershell
+.\scripts\run-os.cmd -NetworkMode User
+```
+
+The launcher forwards Windows port 2222 to ORYVAEL port 22. After boot:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\oryvael_admin" -p 2222 admin@127.0.0.1
+```
+
+The default console is the serial terminal. After the ring-3 init self-test completes, type `help` at the `oryvael::system>` recovery prompt.
 
 See `docs/development/bare-metal-quickstart.md` for host prerequisites, kernel services and the exact runtime boundary.
+See `PROJECT_STATUS.md` for the authoritative delivered/not-delivered snapshot.
 
 ## Current status
 
-ORYVAEL now boots a native bare-metal x86_64 OS base with a real CPL3 boundary. The boot path provides a physical 4 KiB frame allocator, kernel heap, ORYVAEL-owned CR3/PML4 root, fresh user mappings, GDT/TSS, fail-closed architectural exception handling, a 100 Hz interrupt clock, DPL3 syscall gate, first ring-3 `init`, capability-checked IPC and a minimal RAM filesystem.
+ORYVAEL now boots a native bare-metal x86_64 OS base with a real CPL3 boundary. The boot path provides a physical 4 KiB frame allocator, kernel heap, ORYVAEL-owned CR3/PML4 root, fresh user mappings, GDT/TSS, fail-closed architectural exception handling, a 100 Hz interrupt clock, DPL3 syscall gate, first ring-3 `init`, capability-checked IPC, a minimal RAM filesystem and a native RTL8139/DHCP/ARP/IPv4/ICMP/DNS/TCP network path.
 
 The live integration test requires `init` to execute in ring 3 while timer interrupts occur, then verifies syscall output, the capability IPC value `42`, the RAMFS `/hello` read, a clean user exit and the recovery kernel console. The current test observed hundreds of timer preemptions while the user process was running.
 
-The recovery console exposes `help`, `mem`, `uptime`, `alloc`, `vm`, `ps`, `fs`, `ipc`, `clear`, `about` and `reboot`.
+The recovery console exposes `help`, `status`, `debug`, `ip`, `net`, `ping [host]`, `users`, `whoami`, `ssh status`, `mem`, `uptime`, `alloc`, `vm`, `ps`, `fs`, `ipc`, `clear`, `about`, `version`, `banner` and `reboot`. Hostname ping performs a native DNS A lookup before sending ICMP. The native account registry separates the kernel-console `system` identity from the remote `admin` identity. A native single-session TCP/IPv4 SSHv2 service listens on port 22 and permits only the provisioned Ed25519 key; password, `system` and root login are disabled.
 
-The existing trusted-core CI continues to validate governance and security semantics, but Linux sandbox mechanisms are reference/prototype infrastructure rather than the ORYVAEL OS substrate.
+The existing trusted-core CI continues to validate governance and security semantics, but Linux sandbox mechanisms are reference/prototype infrastructure rather than the ORYVAEL OS substrate. No model or inference runtime executes inside the native image yet; “AI-native” describes the target authority and capability architecture, not a completed embedded model runtime.
 
-This is a native minimal OS foundation, not yet a general-purpose or production-secure operating system. The current timer still uses PIT/PIC; only one ring-3 process is executed and preemption is measured rather than context-switched among multiple runnable processes; the kernel retains inherited lower-level mappings below its new PML4 root; the filesystem is RAM-only; persistent storage, graphics and networking are not implemented yet.
+This is a native minimal OS foundation, not yet a general-purpose or production-secure operating system. The current timer still uses PIT/PIC; only one ring-3 process is executed and preemption is measured rather than context-switched among multiple runnable processes; the kernel retains inherited lower-level mappings below its new PML4 root; the filesystem is RAM-only; persistent storage and graphics are not implemented yet. Networking currently targets a polled RTL8139 device and provides DHCP, ARP, IPv4, ICMP echo and a deliberately small single-session TCP/SSHv2 server rather than a general-purpose socket layer.
 
 ## Immediate kernel milestones
 
@@ -160,7 +174,7 @@ This is a native minimal OS foundation, not yet a general-purpose or production-
 4. Add kernel threads plus saved contexts and context-switch between multiple runnable ring-3 processes.
 5. Grow the current capability mailbox into a kernel object/handle table with rights transfer and blocking IPC.
 6. Add storage drivers and a persistent filesystem service beyond the current RAMFS.
-7. Add framebuffer/graphics input and networking drivers/services.
+7. Add framebuffer/graphics input, generalize the current TCP/SSH implementation and move the NIC to interrupt-driven service.
 8. Port governance, audit and root-control semantics from the host reference into native services.
 9. Add an ARM64 boot path after the x86_64 kernel contracts stabilize.
 

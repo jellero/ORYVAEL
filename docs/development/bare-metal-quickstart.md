@@ -23,6 +23,8 @@ The native base provides:
 - timer preemption/accounting while `init` is executing in user mode;
 - capability-checked mailbox IPC;
 - a minimal RAM filesystem containing `/hello`;
+- a polled RTL8139 PCI driver with DMA receive/transmit rings;
+- DHCP address acquisition plus ARP, IPv4 and ICMP echo;
 - direct 16550/COM1 console I/O and polled PS/2 input;
 - a recovery kernel console;
 - a QEMU/OVMF integration test that boots and exercises all of these boundaries.
@@ -31,6 +33,14 @@ The recovery console commands are:
 
 ```text
 help
+status
+debug
+net
+ip
+ping
+users
+whoami
+ssh status
 mem
 uptime
 alloc
@@ -43,7 +53,27 @@ about
 reboot
 ```
 
-`vm` reports the ORYVAEL CR3 and user address-space base. `ps` reports the completed ring-3 init and how many timer interrupts preempted it. `fs` exposes the RAMFS test file, and `ipc` reports the capability-mailbox state.
+`debug` prints a line-by-line kernel diagnostic snapshot. `ip` prints the
+DHCP-provided address, mask, gateway, DNS and MAC. `net` reports PCI, driver,
+DHCP and packet-counter details. `ping` verifies ICMP against the default
+gateway, while `ping www.google.it` performs a native DNS A lookup followed by
+an ICMP echo to the resolved address. `vm` reports the
+ORYVAEL CR3 and user address-space base. `ps` reports the completed ring-3 init
+and how many timer interrupts preempted it. `fs` exposes the RAMFS test file,
+and `ipc` reports the capability-mailbox state.
+
+`users` exposes the native account registry and `whoami` reports the current
+kernel-console identity. `ssh status` reports the native TCP/SSHv2 listener.
+Password, `system` and root login are disabled; the remote `admin` account uses
+only its explicitly provisioned Ed25519 key.
+
+The Windows launcher maps host port 2222 to guest port 22. After boot:
+
+```powershell
+ssh -i $env:USERPROFILE\.ssh\oryvael_admin -p 2222 admin@127.0.0.1
+```
+
+The SSH shell provides `help`, `whoami`, `ip`, `uptime`, `reboot` and `exit`.
 
 ## Important current limits
 
@@ -53,7 +83,10 @@ The timer can interrupt a user process and the test proves that privilege transi
 
 The current exception gates stop the system fail-closed with diagnostics. Per-process fault recovery/termination is not yet implemented.
 
-The filesystem is RAM-only. There are no persistent storage drivers, framebuffer desktop, networking stack or native AI services yet.
+The filesystem is RAM-only. There are no persistent storage drivers,
+framebuffer desktop or native AI services yet. The bootstrap network stack is
+limited to a polled RTL8139 target with DHCP, ARP, IPv4, ICMP echo and one
+in-order TCP/SSHv2 session; it is not yet a general socket subsystem.
 
 ## Host build requirements
 
@@ -91,28 +124,33 @@ dist/BOOTX64.EFI
 ./scripts/run-os.sh
 ```
 
-A successful native-userspace boot includes markers similar to:
+A successful native-userspace boot now presents a branded, operator-friendly sequence:
 
 ```text
-ORYVAEL: firmware boot services detached
-ORYVAEL: bare-metal kernel online
-ORYVAEL: physical allocator online regions=... free_pages=...
-ORYVAEL: kernel heap online bytes=262144
-ORYVAEL: page tables online cr3=0x...
-ORYVAEL: exceptions online vectors=32
-ORYVAEL: timer interrupts online hz=100
-ORYVAEL: userspace mappings online base=0x0000400000000000
-ORYVAEL: syscall console online vector=0x80
-ORYVAEL: userspace init entering ring3
-ORYVAEL: ring3 init online
-ORYVAEL: capability IPC roundtrip value=42
-ORYVAEL: ramfs read /hello bytes=25
-hello from ORYVAEL ramfs
-ORYVAEL: init exited code=0 preemptions=...
-ORYVAEL: native minimal OS ready
+============================================================
+                      O R Y V A E L
+============================================================
+ Sovereign AI-Native Operating System  |  x86_64 UEFI
+ Intelligence proposes. Humans authorize. ORYVAEL enforces.
 
-ORYVAEL OS native base
-oryvael>
+Boot sequence
+ [  OK  ] Firmware entry accepted
+ [  OK  ] Firmware handoff complete
+ [  OK  ] Native kernel online
+ ...
+ [  OK  ] Ring-3 transition verified
+ [  25% ] Timer preemption verified
+ [  50% ] Syscall gateway verified
+ [  75% ] Isolation loop scheduled
+ [ 100% ] Preemption proof complete
+ [  OK  ] Scheduler and recovery console ready
+
+ORYVAEL SYSTEM READY
+
++----------------------------------------------------------+
+|                 Welcome to ORYVAEL                       |
++----------------------------------------------------------+
+oryvael::system>
 ```
 
 The default QEMU runner uses the serial terminal as the interactive recovery console.
@@ -132,12 +170,14 @@ ORYVAEL kernel (CPL0)
     ├─ GDT + TSS + exceptions + timer
     ├─ syscall / capability boundary
     ├─ RAMFS
+    ├─ RTL8139 + DHCP/ARP/IPv4/ICMP/DNS/TCP
+    ├─ SSHv2 / Ed25519 → admin identity
     └─ ring-3 address space
               ↓
          ORYVAEL init (CPL3)
 ```
 
-There is no Linux kernel or Linux distribution between firmware and ORYVAEL.
+The runtime boundary is fully native: firmware hands control directly to the ORYVAEL kernel.
 
 ## Next native milestones
 
@@ -147,4 +187,4 @@ There is no Linux kernel or Linux distribution between firmware and ORYVAEL.
 4. Save/restore contexts and schedule multiple runnable ring-3 processes.
 5. Generalize the capability mailbox into kernel objects, rights and blocking IPC.
 6. Add persistent storage and a filesystem service.
-7. Add framebuffer/graphics and networking.
+7. Add framebuffer/graphics, generalize the current TCP/SSH path and add NIC interrupts.

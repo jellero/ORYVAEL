@@ -1,0 +1,7 @@
+[target.x86_64-unknown-uefi]
+# RustCrypto's AVX2 Poly1305 backend triggers an LLVM 18 code-generation
+# failure for the UEFI ABI. qemu64 has no AVX2, so use the portable backend.
+rustflags = [
+  "--cfg", "poly1305_force_soft",
+  "--cfg", "curve25519_dalek_backend=\"serial\"",
+]

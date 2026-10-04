@@ -58,5 +58,5 @@ exec qemu-system-x86_64 \
   -display none \
   -serial stdio \
   -monitor none \
-  -net none \
-  -no-reboot
+  -device rtl8139,netdev=net0 \
+  -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22

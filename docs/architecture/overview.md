@@ -41,25 +41,29 @@ Produces compilation, test, fuzz, property, static-analysis, dependency, archite
 
 Filesystem, network, secrets, display/audio, telemetry, updater and application lifecycle brokers.
 
-The native system-service layer is still under construction. Existing Linux-hosted trusted-core services are reference/prototype implementations for governance, policy, proof and audit semantics; they are not part of the ORYVAEL product runtime boundary.
-
 ## Application Runtime
 
-Applications execute with manifest-declared capabilities. Native, WASM and container-style workloads may coexist as product profiles evolve, but privileged access maps to the same capability and policy contract.
+Applications execute with manifest-declared capabilities. Native, WASM and container workloads may coexist but privileged access maps to the same policy contract.
 
 ## Kernel and Hardware
 
-ADR-0005 defines ORYVAEL as a bare-metal operating system with its own kernel and userland and supersedes the earlier Linux-first runtime direction.
+The product substrate is the ORYVAEL bare-metal kernel. The current x86_64
+UEFI implementation owns memory, privilege transitions, exceptions, timer
+interrupts, syscalls, capability IPC and the RTL8139 network device after
+terminating UEFI boot services.
 
-The initial hardware target is x86_64 with UEFI used only for machine handoff. After `ExitBootServices`, ORYVAEL owns execution below the system-service boundary. Kernel responsibilities include memory management, interrupt handling, scheduling, IPC primitives, capability enforcement, isolation, device access and process lifecycle.
+Linux remains only a development-host and reference-prototype environment for
+the existing Trusted Core crates. Linux mechanisms do not sit below the
+ORYVAEL guest and are not part of the product runtime boundary.
 
-The current native foundation owns CR3 at the PML4 level, provides fresh ring-3 mappings, installs GDT/TSS and architectural exception gates, runs a 100 Hz timer interrupt path, exposes a DPL3 syscall gate and executes a first user payload at CPL3. During page-table migration, inherited lower-level supervisor mappings remain temporarily beneath the ORYVAEL-owned PML4 root.
-
-Linux, macOS and Windows remain valid development hosts for compilation, image construction and virtualization. Host facilities are outside the ORYVAEL runtime and trust boundary.
+The current native image is a kernel foundation, not yet the complete plane
+stack described above. In particular, the AI Control Plane, deterministic
+policy services and model inference runtime have not yet migrated into native
+ring-3 services.
 
 ## Critical control-flow rule
 
-AI requests privileged actions. It does not directly mutate privileged system state.
+AI requests privileged actions. It does not directly mutate privileged host state.
 
 ~~~
 AI request

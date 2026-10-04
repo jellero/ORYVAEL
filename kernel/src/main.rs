@@ -369,7 +369,7 @@ pub extern "efiapi" fn efi_main(image_handle: EfiHandle, system_table: *mut c_vo
     disable_interrupts();
     serial_write("ORYVAEL: firmware boot services detached\r\n");
     serial_write("ORYVAEL: bare-metal kernel online\r\n");
-    serial_write("ORYVAEL: no Linux kernel\r\n");
+    serial_write("ORYVAEL: native runtime boundary established\r\n");
 
     let mut frames = FrameAllocator::from_boot_map(&boot_map);
     serial_write("ORYVAEL: physical allocator online regions=");
@@ -793,7 +793,7 @@ fn execute_command(line: &[u8], frames: &mut FrameAllocator, heap: &mut KernelHe
     } else if command == b"clear" {
         serial_write("\x1b[2J\x1b[H");
     } else if command == b"about" {
-        serial_write("ORYVAEL minimal bare-metal base: native kernel, no Linux substrate\r\n");
+        serial_write("ORYVAEL native system: capability-first authority under human control\r\n");
     } else if command == b"reboot" {
         serial_write("rebooting...\r\n");
         reboot();

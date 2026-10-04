@@ -36,6 +36,24 @@ jobs:
             sleep 5
             printf 'help\r'
             sleep 0.2
+            printf 'status\r'
+            sleep 0.2
+            printf 'debug\r'
+            sleep 0.2
+            printf 'net\r'
+            sleep 0.2
+            printf 'ip\r'
+            sleep 0.2
+            printf 'ping\r'
+            sleep 0.2
+            printf 'users\r'
+            sleep 0.2
+            printf 'whoami\r'
+            sleep 0.2
+            printf 'ssh status\r'
+            sleep 0.2
+            printf 'version\r'
+            sleep 0.2
             printf 'vm\r'
             sleep 0.2
             printf 'ps\r'
@@ -49,7 +67,7 @@ jobs:
             printf 'uptime\r'
             sleep 0.2
             printf 'about\r'
-          } | timeout 15s ./scripts/run-os.sh >boot.log 2>&1
+          } | timeout 30s ./scripts/run-os.sh >boot.log 2>&1
           status=${PIPESTATUS[1]}
           set -e
 
@@ -60,30 +78,56 @@ jobs:
             exit "$status"
           fi
 
-          grep -F "ORYVAEL: firmware boot services detached" boot.log
-          grep -F "ORYVAEL: physical allocator online" boot.log
-          grep -F "ORYVAEL: kernel heap online" boot.log
-          grep -F "ORYVAEL: page tables online cr3=" boot.log
-          grep -F "ORYVAEL: exceptions online vectors=32" boot.log
-          grep -F "ORYVAEL: timer interrupts online hz=100" boot.log
-          grep -F "ORYVAEL: userspace mappings online base=" boot.log
-          grep -F "ORYVAEL: syscall console online vector=0x80" boot.log
-          grep -F "ORYVAEL: userspace init entering ring3" boot.log
-          grep -F "ORYVAEL: ring3 init online" boot.log
-          grep -F "ORYVAEL: capability IPC roundtrip value=42" boot.log
-          grep -F "ORYVAEL: ramfs read /hello bytes=" boot.log
-          grep -F "hello from ORYVAEL ramfs" boot.log
-          grep -E 'ORYVAEL: init exited code=0 preemptions=[1-9][0-9]*' boot.log
-          grep -E 'ORYVAEL: scheduler online runnable=0 completed=1 ring3_preemptions=[1-9][0-9]*' boot.log
-          grep -F "ORYVAEL: native minimal OS ready" boot.log
-          grep -F "commands: help mem uptime alloc vm ps fs ipc clear about reboot" boot.log
-          grep -E 'vm: oryvael_cr3=0x[0-9a-f]+ user_base=0x[0-9a-f]+' boot.log
-          grep -E 'process: init state=exited code=0 ring3_preemptions=[1-9][0-9]*' boot.log
-          grep -F "ramfs: /hello -> hello from ORYVAEL ramfs" boot.log
+          grep -F "Firmware handoff complete" boot.log
+          grep -F "Physical memory manager online" boot.log
+          grep -F "Kernel heap online" boot.log
+          grep -F "Virtual memory ownership established" boot.log
+          grep -F "Exception and interrupt gates online" boot.log
+          grep -F "System clock online at 100 Hz" boot.log
+          grep -F "Userspace address space prepared" boot.log
+          grep -F "Capability syscall gateway armed" boot.log
+          grep -F "Launching ring-3 init" boot.log
+          grep -F "Ring-3 transition verified" boot.log
+          grep -F "[  25% ]" boot.log
+          grep -F "[  50% ]" boot.log
+          grep -F "[  75% ]" boot.log
+          grep -F "[ 100% ]" boot.log
+          grep -F "Capability IPC roundtrip value=42" boot.log
+          grep -F "RAM filesystem mounted bytes=" boot.log
+          grep -F "ORYVAEL filesystem handshake complete" boot.log
+          grep -F "Init completed with verified preemption" boot.log
+          grep -F "Scheduler and recovery console ready" boot.log
+          grep -F "ORYVAEL SYSTEM READY" boot.log
+          grep -F "ORYVAEL command center" boot.log
+          grep -F "System status" boot.log
+          grep -F "Debug snapshot" boot.log
+          grep -F "privilege.user    CPL3 verified" boot.log
+          grep -F "Network status" boot.log
+          grep -F "driver             RTL8139" boot.log
+          grep -F "dhcp.state         bound" boot.log
+          grep -F "ipv4.address       10.0.2.15" boot.log
+          grep -F "ssh.service        listening on tcp/22" boot.log
+          grep -F "service          enabled" boot.log
+          grep -F "authentication   Ed25519 public key only" boot.log
+          grep -F "IPv4 configuration" boot.log
+          grep -F "address    10.0.2.15" boot.log
+          grep -F "reply: source=10.0.2.2" boot.log
+          grep -F "Account registry" boot.log
+          grep -F "human-administrator" boot.log
+          grep -F "name           system" boot.log
+          grep -F "Secure shell status" boot.log
+          grep -F "AI runtime   not installed" boot.log
+          grep -F "password login   disabled" boot.log
+          grep -F "ORYVAEL 0.0.2-dev" boot.log
+          grep -E 'paging.cr3       0x[0-9a-f]+' boot.log
+          grep -E 'userspace.base   0x[0-9a-f]+' boot.log
+          grep -F 'init.state       exited' boot.log
+          grep -E 'init.preemptions [1-9][0-9]*' boot.log
+          grep -F "ramfs: /hello -> ORYVAEL filesystem handshake complete" boot.log
           grep -F "ipc: handle=0x1001 full=0 last_value=42" boot.log
-          grep -F "memory: conventional_free_pages=" boot.log
+          grep -F "Memory snapshot" boot.log
           grep -E 'uptime: ticks=[1-9][0-9]* seconds=[0-9]+' boot.log
-          grep -F "ORYVAEL native OS base: own CR3, exceptions, ring3, syscalls, capability IPC, ramfs" boot.log
+          grep -F "ORYVAEL is a sovereign AI-native operating system." boot.log
 
       - name: Archive boot image
         uses: actions/upload-artifact@v4

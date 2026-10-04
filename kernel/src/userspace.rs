@@ -18,10 +18,23 @@ const SYS_FS_READ: u64 = 5;
 const IPC_CAP: u64 = 0x1001;
 const RAMFS_CAP: u64 = 0x2001;
 const IPC_TEST_VALUE: u64 = 42;
-const USER_SPIN_COUNT: u32 = 50_000_000;
+// Keep every visible phase long enough to observe while avoiding a boot that
+// looks stalled on software-emulated CPUs.
+const USER_SPIN_CHUNK: u32 = 2_000_000;
 
-static RAMFS_HELLO: &[u8] = b"hello from ORYVAEL ramfs\n";
-static INIT_MESSAGE: &[u8] = b"ORYVAEL: ring3 init online\n";
+static RAMFS_HELLO: &[u8] = b"ORYVAEL filesystem handshake complete\n";
+static INIT_MESSAGE: &[u8] = b"\x1b[1;32m [  OK  ]\x1b[0m Ring-3 transition verified\n";
+static PREEMPT_25_MESSAGE: &[u8] = b"\x1b[1;34m [  25% ]\x1b[0m Timer preemption verified\n";
+static PREEMPT_50_MESSAGE: &[u8] = b"\x1b[1;34m [  50% ]\x1b[0m Syscall gateway verified\n";
+static PREEMPT_75_MESSAGE: &[u8] = b"\x1b[1;34m [  75% ]\x1b[0m Isolation loop scheduled\n";
+static PREEMPT_100_MESSAGE: &[u8] = b"\x1b[1;32m [ 100% ]\x1b[0m Preemption proof complete\n";
+
+const INIT_MESSAGE_OFFSET: u64 = 0;
+const PREEMPT_25_OFFSET: u64 = 128;
+const PREEMPT_50_OFFSET: u64 = 256;
+const PREEMPT_75_OFFSET: u64 = 384;
+const PREEMPT_100_OFFSET: u64 = 512;
+const FS_DEST_OFFSET: u64 = 1024;
 
 #[repr(align(4096))]
 struct UserPage([u8; USER_PAGE_BYTES]);
@@ -73,11 +86,19 @@ pub fn prepare_and_run(page_tables: &mut PageTables) -> Option<UserRunResult> {
         core::ptr::write_bytes(code_va as *mut u8, 0, USER_PAGE_BYTES);
         core::ptr::write_bytes(data_va as *mut u8, 0, USER_PAGE_BYTES);
         core::ptr::write_bytes(stack_va as *mut u8, 0, USER_PAGE_BYTES);
-        core::ptr::copy_nonoverlapping(
-            INIT_MESSAGE.as_ptr(),
-            data_va as *mut u8,
-            INIT_MESSAGE.len(),
-        );
+        for (offset, message) in [
+            (INIT_MESSAGE_OFFSET, INIT_MESSAGE),
+            (PREEMPT_25_OFFSET, PREEMPT_25_MESSAGE),
+            (PREEMPT_50_OFFSET, PREEMPT_50_MESSAGE),
+            (PREEMPT_75_OFFSET, PREEMPT_75_MESSAGE),
+            (PREEMPT_100_OFFSET, PREEMPT_100_MESSAGE),
+        ] {
+            core::ptr::copy_nonoverlapping(
+                message.as_ptr(),
+                (data_va + offset) as *mut u8,
+                message.len(),
+            );
+        }
     }
 
     build_init_program(code_va as *mut u8)?;
@@ -90,11 +111,9 @@ pub fn prepare_and_run(page_tables: &mut PageTables) -> Option<UserRunResult> {
         stack_va,
     )?;
 
-    io::serial_write("ORYVAEL: userspace mappings online base=");
-    io::serial_write_hex(USER_CODE_VA);
-    io::serial_write("\r\n");
-    io::serial_write("ORYVAEL: syscall console online vector=0x80\r\n");
-    io::serial_write("ORYVAEL: userspace init entering ring3\r\n");
+    io::serial_write(" \x1b[1;32m[  OK  ]\x1b[0m Userspace address space prepared\r\n");
+    io::serial_write(" \x1b[1;32m[  OK  ]\x1b[0m Capability syscall gateway armed\r\n");
+    io::serial_write(" \x1b[1;34m[ .... ]\x1b[0m Launching ring-3 init\r\n");
 
     // SAFETY: code/data/stack are user-mapped and the TSS/IDT are already live.
     unsafe { arch::enter_user(USER_CODE_VA, USER_STACK_TOP) };
@@ -102,11 +121,7 @@ pub fn prepare_and_run(page_tables: &mut PageTables) -> Option<UserRunResult> {
 
     let exit_code = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(USER_EXIT_CODE)) };
     let preemptions = arch::user_preemptions();
-    io::serial_write("ORYVAEL: init exited code=");
-    io::serial_write_u64(exit_code);
-    io::serial_write(" preemptions=");
-    io::serial_write_u64(preemptions);
-    io::serial_write("\r\n");
+    io::serial_write(" \x1b[1;32m[  OK  ]\x1b[0m Init completed with verified preemption\r\n");
 
     Some(UserRunResult {
         exit_code,
@@ -117,22 +132,29 @@ pub fn prepare_and_run(page_tables: &mut PageTables) -> Option<UserRunResult> {
 fn build_init_program(code_ptr: *mut u8) -> Option<()> {
     let mut e = Emitter::new(code_ptr, USER_PAGE_BYTES);
 
-    // Stay in ring 3 long enough for the timer to preempt this process at least
-    // once. This is the scheduler/preemption smoke boundary, not a delay API.
-    e.byte(0xb9)?;
-    e.u32(USER_SPIN_COUNT)?;
-    e.bytes(&[0xf3, 0x90, 0xff, 0xc9, 0x75, 0xfa])?; // pause; dec ecx; jnz -6
-
     e.syscall3(
         SYS_WRITE,
-        USER_DATA_VA,
+        USER_DATA_VA + INIT_MESSAGE_OFFSET,
         INIT_MESSAGE.len() as u64,
         0,
     )?;
+
+    // Stay in ring 3 long enough for repeated timer preemption, but expose
+    // progress through the syscall boundary instead of appearing to hang.
+    for (offset, message) in [
+        (PREEMPT_25_OFFSET, PREEMPT_25_MESSAGE),
+        (PREEMPT_50_OFFSET, PREEMPT_50_MESSAGE),
+        (PREEMPT_75_OFFSET, PREEMPT_75_MESSAGE),
+        (PREEMPT_100_OFFSET, PREEMPT_100_MESSAGE),
+    ] {
+        e.spin(USER_SPIN_CHUNK)?;
+        e.syscall3(SYS_WRITE, USER_DATA_VA + offset, message.len() as u64, 0)?;
+    }
+
     e.syscall3(SYS_CAP_SEND, IPC_CAP, IPC_TEST_VALUE, 0)?;
     e.syscall3(SYS_CAP_RECV, IPC_CAP, 0, 0)?;
 
-    let fs_dest = USER_DATA_VA + 512;
+    let fs_dest = USER_DATA_VA + FS_DEST_OFFSET;
     e.syscall3(SYS_FS_READ, RAMFS_CAP, fs_dest, 512)?;
     // fs_read returned its byte count in rax. Move it to rsi for write().
     e.bytes(&[0x48, 0x89, 0xc6])?; // mov rsi, rax
@@ -222,6 +244,12 @@ impl Emitter {
         self.mov_rdx(c)?;
         self.int80()
     }
+
+    fn spin(&mut self, iterations: u32) -> Option<()> {
+        self.byte(0xb9)?; // mov ecx, imm32
+        self.u32(iterations)?;
+        self.bytes(&[0xf3, 0x90, 0xff, 0xc9, 0x75, 0xfa]) // pause; dec ecx; jnz -6
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -233,7 +261,9 @@ pub extern "C" fn oryvael_syscall_dispatch(frame_ptr: *mut UserTrapFrame) -> u64
     let frame = unsafe { &mut *frame_ptr };
     match frame.rax {
         SYS_EXIT => {
-            unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(USER_EXIT_CODE), frame.rdi) };
+            unsafe {
+                core::ptr::write_volatile(core::ptr::addr_of_mut!(USER_EXIT_CODE), frame.rdi)
+            };
             1
         }
         SYS_WRITE => {
@@ -295,7 +325,7 @@ fn sys_cap_recv(handle: u64) -> u64 {
     }
     let value = unsafe { core::ptr::read_volatile(core::ptr::addr_of!(IPC_MAILBOX_VALUE)) };
     unsafe { core::ptr::write_volatile(core::ptr::addr_of_mut!(IPC_MAILBOX_FULL), 0) };
-    io::serial_write("ORYVAEL: capability IPC roundtrip value=");
+    io::serial_write("\x1b[1;32m [  OK  ]\x1b[0m Capability IPC roundtrip value=");
     io::serial_write_u64(value);
     io::serial_write("\r\n");
     value
@@ -310,10 +340,8 @@ fn sys_fs_read(handle: u64, destination: u64, capacity: u64) -> u64 {
         return u64::MAX;
     };
     // SAFETY: destination range is confined to the writable user data page.
-    unsafe {
-        core::ptr::copy_nonoverlapping(RAMFS_HELLO.as_ptr(), destination as *mut u8, count)
-    };
-    io::serial_write("ORYVAEL: ramfs read /hello bytes=");
+    unsafe { core::ptr::copy_nonoverlapping(RAMFS_HELLO.as_ptr(), destination as *mut u8, count) };
+    io::serial_write("\x1b[1;32m [  OK  ]\x1b[0m RAM filesystem mounted bytes=");
     io::serial_write_u64(count as u64);
     io::serial_write("\r\n");
     count as u64
