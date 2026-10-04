@@ -120,7 +120,7 @@ Trusted components are written in Rust. Unsafe code remains forbidden by default
 
 ## Bare-metal quickstart
 
-Build the Stage 0 x86_64 image:
+Build the x86_64 image:
 
 ```sh
 ./scripts/build-os.sh
@@ -132,25 +132,29 @@ Boot it in QEMU/OVMF:
 ./scripts/run-os.sh
 ```
 
-See `docs/development/bare-metal-quickstart.md` for host prerequisites and the exact runtime boundary.
+The default console is the serial terminal. After boot, type `help` at the `oryvael>` prompt.
+
+See `docs/development/bare-metal-quickstart.md` for host prerequisites, kernel services and the exact runtime boundary.
 
 ## Current status
 
-The repository now has a Stage 0 bare-metal kernel path in addition to the earlier host-side trusted-core prototype. Stage 0 is deliberately small: it boots through UEFI, captures the machine memory map, calls `ExitBootServices`, emits diagnostics directly through x86 port I/O and stays alive in an ORYVAEL-owned kernel idle loop.
+ORYVAEL now has a minimally interactive bare-metal kernel base. It boots through UEFI, captures and retains the machine memory map, calls `ExitBootServices`, builds a physical 4 KiB frame allocator from conventional memory, initializes a kernel bump heap, installs an ORYVAEL IDT timer vector, remaps the legacy PIC, programs a 100 Hz PIT clock and starts a native serial/PS2 kernel console.
+
+The live console currently exposes `help`, `mem`, `uptime`, `alloc`, `clear`, `about` and `reboot`. CI boots the real image in QEMU/OVMF and exercises allocator, timer and console commands rather than accepting boot text alone.
 
 The existing trusted-core CI continues to validate governance and security semantics, but Linux sandbox mechanisms are reference/prototype infrastructure rather than the ORYVAEL OS substrate.
 
-ORYVAEL is not yet a general-purpose or production-secure operating system. Memory management, exceptions/interrupts, scheduling, processes, IPC, drivers and userland remain to be implemented natively.
+ORYVAEL is not yet a general-purpose or production-secure operating system. The next kernel boundary is ORYVAEL-owned page tables, complete exception handling, APIC routing, scheduling, ring-3 processes, capability IPC, drivers, storage and native userland services.
 
 ## Immediate kernel milestones
 
-1. Build the physical page allocator from the retained firmware memory map.
-2. Install ORYVAEL GDT/IDT and exception handlers.
-3. Bring up APIC timer and interrupt routing.
-4. Own x86_64 page tables and virtual address-space management.
-5. Add kernel tasks, preemptive scheduling and user-mode processes.
+1. Own x86_64 page tables and virtual address-space management.
+2. Install complete architectural exception handlers with fault diagnostics.
+3. Replace the bootstrap PIT/PIC timer path with local APIC/IOAPIC routing.
+4. Add kernel tasks and preemptive scheduling.
+5. Enter ring 3 and launch the first ORYVAEL user process.
 6. Implement capability-native IPC and object handles.
-7. Start the first ORYVAEL userland service instead of the Stage 0 idle loop.
+7. Add storage/filesystem, framebuffer/graphics and networking drivers/services.
 8. Port governance, audit and root-control semantics from the host reference into native services.
 9. Add an ARM64 boot path after the x86_64 kernel contracts stabilize.
 

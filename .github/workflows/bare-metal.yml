@@ -28,12 +28,23 @@ jobs:
       - name: Build ORYVAEL bare-metal image
         run: ./scripts/build-os.sh
 
-      - name: Boot ORYVAEL and verify firmware handoff
+      - name: Boot ORYVAEL and verify minimal kernel services
         shell: bash
         run: |
           set +e
-          timeout 12s ./scripts/run-os.sh >boot.log 2>&1
-          status=$?
+          {
+            sleep 3
+            printf 'help\r'
+            sleep 0.2
+            printf 'mem\r'
+            sleep 0.2
+            printf 'alloc\r'
+            sleep 0.2
+            printf 'uptime\r'
+            sleep 0.2
+            printf 'about\r'
+          } | timeout 12s ./scripts/run-os.sh >boot.log 2>&1
+          status=${PIPESTATUS[1]}
           set -e
 
           cat boot.log
@@ -44,8 +55,15 @@ jobs:
           fi
 
           grep -F "ORYVAEL: firmware boot services detached" boot.log
-          grep -F "ORYVAEL: bare-metal kernel online" boot.log
-          grep -F "ORYVAEL: no Linux kernel" boot.log
+          grep -F "ORYVAEL: physical allocator online" boot.log
+          grep -F "ORYVAEL: kernel heap online" boot.log
+          grep -F "ORYVAEL: timer interrupts online hz=100" boot.log
+          grep -F "ORYVAEL: minimal system ready" boot.log
+          grep -F "commands: help mem uptime alloc clear about reboot" boot.log
+          grep -F "memory: conventional_free_pages=" boot.log
+          grep -E 'alloc: frame=0x[0-9a-f]+ heap64=0x[0-9a-f]+' boot.log
+          grep -E 'uptime: ticks=[1-9][0-9]* seconds=[0-9]+' boot.log
+          grep -F "ORYVAEL minimal bare-metal base: native kernel, no Linux substrate" boot.log
 
       - name: Archive boot image
         uses: actions/upload-artifact@v4
