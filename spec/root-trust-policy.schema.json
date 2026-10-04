@@ -24,7 +24,7 @@
             "minItems": 1,
             "uniqueItems": true,
             "items": {
-              "enum": ["tool_catalog", "change_plan", "principal_policy", "workspace_registry"]
+              "enum": ["tool_catalog", "change_plan", "principal_policy", "workspace_registry", "peer_policy"]
             }
           }
         }
