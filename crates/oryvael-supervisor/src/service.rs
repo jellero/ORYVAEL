@@ -275,10 +275,7 @@ impl PeerIdentity {
         let executable_file = File::open(&proc_exe)?;
         process.ensure_alive()?;
 
-        let stable_exe = PathBuf::from(format!(
-            "/proc/self/fd/{}",
-            executable_file.as_raw_fd()
-        ));
+        let stable_exe = PathBuf::from(format!("/proc/self/fd/{}", executable_file.as_raw_fd()));
         let executable_path = fs::read_link(&stable_exe)?;
         let executable_sha256 = sha256_file(&stable_exe)?;
         process.ensure_alive()?;
@@ -299,10 +296,7 @@ impl PeerIdentity {
         let executable_file = File::open(&proc_exe)?;
         self.process.ensure_alive()?;
 
-        let stable_exe = PathBuf::from(format!(
-            "/proc/self/fd/{}",
-            executable_file.as_raw_fd()
-        ));
+        let stable_exe = PathBuf::from(format!("/proc/self/fd/{}", executable_file.as_raw_fd()));
         let executable_sha256 = sha256_file(&stable_exe)?;
         self.process.ensure_alive()?;
         if executable_sha256 != self.executable_sha256 {
@@ -1352,7 +1346,12 @@ mod tests {
         assert!(ledger.records().iter().any(|record| {
             record.event.action == "ipc.peer.authenticated"
                 && record.event.metadata.contains_key("peer_pid")
-                && record.event.metadata.get("peer_pidfd_bound").map(String::as_str) == Some("true")
+                && record
+                    .event
+                    .metadata
+                    .get("peer_pidfd_bound")
+                    .map(String::as_str)
+                    == Some("true")
                 && record.event.metadata.contains_key("peer_executable_sha256")
         }));
         assert!(
