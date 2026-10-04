@@ -116,7 +116,12 @@
         "audit.append"
       ],
       "capabilities_exposed": [
-        "worker.supervise"
+        "worker.supervise",
+        "trusted-service.local-ipc",
+        "root-policy.pin",
+        "root-epoch.persist",
+        "verification.telemetry",
+        "supervisor.lifecycle.audit"
       ]
     },
     {
