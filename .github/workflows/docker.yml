@@ -1,0 +1,81 @@
+name: docker
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker compose build
+
+      - name: Start ORYVAEL
+        run: docker compose up -d
+
+      - name: Wait for trusted service
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            if docker compose exec -T oryvael \
+              oryvael-service status --socket /run/oryvael/trusted.sock >/tmp/oryvael-status.json 2>/dev/null; then
+              cat /tmp/oryvael-status.json
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose logs oryvael
+          exit 1
+
+      - name: Check nested sandbox support
+        run: docker compose exec -T oryvael oryvael supervisor-doctor
+
+      - name: Run confinement demo
+        shell: bash
+        run: |
+          set +e
+          docker compose exec -T oryvael \
+            oryvael-service supervise \
+            --socket /run/oryvael/trusted.sock \
+            --principal /var/lib/oryvael/bootstrap/developer-principal.json \
+            --job /var/lib/oryvael/bootstrap/demo-job.json \
+            > /tmp/oryvael-supervise.json
+          status=$?
+          set -e
+
+          cat /tmp/oryvael-supervise.json
+          if [ "$status" -ne 0 ]; then
+            stderr_path="$(python3 -c 'import json; print(json.load(open("/tmp/oryvael-supervise.json", encoding="utf-8")).get("result", {}).get("stderr", {}).get("path", ""))' 2>/dev/null || true)"
+            if [ -n "$stderr_path" ]; then
+              echo "--- sandbox stderr: $stderr_path ---"
+              docker compose exec -T oryvael cat "$stderr_path" || true
+            fi
+            exit "$status"
+          fi
+
+          docker compose exec -T oryvael test -f /workspace/demo/generated.txt
+
+      - name: Verify audit chains
+        run: |
+          docker compose exec -T oryvael \
+            oryvael audit-verify /var/lib/oryvael/demo/audit.jsonl
+          docker compose exec -T oryvael \
+            oryvael audit-verify /var/lib/oryvael/audit/trusted-service.jsonl
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --no-color oryvael
+
+      - name: Stop ORYVAEL
+        if: always()
+        run: docker compose down -v

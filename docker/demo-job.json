@@ -1,0 +1,20 @@
+{
+  "principal": "developer-ai/demo",
+  "change_id": "CHG-DOCKER-DEMO-001",
+  "workspace": "/workspace/demo",
+  "command": [
+    "/usr/bin/python3",
+    "-c",
+    "from pathlib import Path\nimport socket\nPath('generated.txt').write_text('ORYVAEL Docker sandbox OK\\n')\noutside_blocked=False\ntry:\n    Path('/oryvael-escape').write_text('escape')\nexcept OSError:\n    outside_blocked=True\nnetwork_blocked=False\ns=socket.socket()\ns.settimeout(0.2)\ntry:\n    s.connect(('1.1.1.1', 53))\nexcept OSError:\n    network_blocked=True\nfinally:\n    s.close()\nif not outside_blocked or not network_blocked:\n    raise SystemExit(9)\nprint('filesystem_escape_blocked=true')\nprint('network_blocked=true')"
+  ],
+  "network": "deny",
+  "read_only_paths": [],
+  "timeout_seconds": 10,
+  "limits": {
+    "memory_bytes": 536870912,
+    "cpu_seconds": 5,
+    "file_size_bytes": 8388608
+  },
+  "audit_log": "/var/lib/oryvael/demo/audit.jsonl",
+  "artifact_store": "/var/lib/oryvael/demo/artifacts"
+}
