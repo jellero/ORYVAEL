@@ -134,7 +134,7 @@ Check nested sandbox support:
 docker compose exec oryvael oryvael supervisor-doctor
 ```
 
-The Docker profile persists the development root policy, audit state and workspace in named volumes. It grants the container additional namespace/mount authority so Bubblewrap can create the inner sandbox; it is therefore a development profile, not a production deployment boundary.
+The Docker profile persists the development root policy, audit state and workspace in named volumes. It runs the outer container in privileged mode so Bubblewrap can create the inner namespace/mount sandbox; it is therefore a development profile, not a production deployment boundary.
 
 See `docs/development/docker-quickstart.md` for the confinement demo, audit verification and security notes.
 
