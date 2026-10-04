@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 
-use crate::{run_job, JobResult, JobSpec};
+use crate::{JobResult, JobSpec, run_job};
 use oryvael_audit::{AuditError, JsonlAuditJournal};
 use oryvael_control::{
-    load_verified_from_files, pin_bytes, ControlError, ControlKind, PinnedFile, RootTrustPolicy,
-    VerifiedControl, VerifiedControlArtifact, DEFAULT_ROOT_POLICY, DEFAULT_ROOT_POLICY_MIN_EPOCH,
+    ControlError, ControlKind, DEFAULT_ROOT_POLICY, DEFAULT_ROOT_POLICY_MIN_EPOCH, PinnedFile,
+    RootTrustPolicy, VerifiedControl, VerifiedControlArtifact, load_verified_from_files, pin_bytes,
 };
 use oryvael_protocol::{AuditDecision, AuditEvent, Principal};
 use serde::{Deserialize, Serialize};
@@ -209,7 +209,10 @@ impl TrustedService {
             BTreeMap::from([
                 ("instance_id".into(), self.instance_id.clone()),
                 ("root_policy_sha256".into(), self.root.policy_sha256.clone()),
-                ("root_policy_epoch".into(), self.root.policy.epoch.to_string()),
+                (
+                    "root_policy_epoch".into(),
+                    self.root.policy.epoch.to_string(),
+                ),
                 ("minimum_epoch".into(), self.root.minimum_epoch.to_string()),
             ]),
         )?;
@@ -281,7 +284,10 @@ impl TrustedService {
                         ("key_version".into(), control.key_version.to_string()),
                         ("artifact_sha256".into(), control.artifact_sha256.clone()),
                         ("root_policy_sha256".into(), self.root.policy_sha256.clone()),
-                        ("root_policy_epoch".into(), self.root.policy.epoch.to_string()),
+                        (
+                            "root_policy_epoch".into(),
+                            self.root.policy.epoch.to_string(),
+                        ),
                     ]),
                 )?;
                 Ok(ServiceResponse::Verified { control })
@@ -513,9 +519,7 @@ pub fn request(
 fn read_request(stream: &mut UnixStream) -> Result<ServiceRequest, ServiceError> {
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
     let mut bytes = Vec::new();
-    stream
-        .take(MAX_REQUEST_BYTES + 1)
-        .read_to_end(&mut bytes)?;
+    stream.take(MAX_REQUEST_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_REQUEST_BYTES {
         return Err(ServiceError::Protocol("request exceeds size limit".into()));
     }
@@ -646,7 +650,8 @@ fn persist_minimum_epoch(path: &Path, epoch: u64) -> Result<(), ServiceError> {
 }
 
 fn nonempty_parent(path: &Path) -> Option<&Path> {
-    path.parent().filter(|parent| !parent.as_os_str().is_empty())
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -672,8 +677,8 @@ mod tests {
     use super::*;
     use oryvael_audit::load_jsonl;
     use oryvael_control::{
-        public_key_from_private_file, sign_from_files, signature_sidecar_path, RootSigner,
-        SignerStatus,
+        RootSigner, SignerStatus, public_key_from_private_file, sign_from_files,
+        signature_sidecar_path,
     };
     use oryvael_protocol::{Principal, PrincipalKind};
     use std::thread;
@@ -715,8 +720,11 @@ mod tests {
             grants: vec![],
         };
         let path = dir.join("principal.json");
-        fs::write(&path, serde_json::to_vec(&principal).expect("principal json"))
-            .expect("principal");
+        fs::write(
+            &path,
+            serde_json::to_vec(&principal).expect("principal json"),
+        )
+        .expect("principal");
         let signature = sign_from_files(
             key_path,
             "root/test",
@@ -760,7 +768,10 @@ mod tests {
         let service = TrustedService::open(service_config.clone()).expect("service epoch 2");
         assert_eq!(service.status().minimum_epoch, 2);
         drop(service);
-        assert_eq!(fs::read_to_string(&service_config.minimum_epoch_path).unwrap(), "2\n");
+        assert_eq!(
+            fs::read_to_string(&service_config.minimum_epoch_path).unwrap(),
+            "2\n"
+        );
 
         let root: RootTrustPolicy =
             serde_json::from_slice(&fs::read(&root_path).expect("root bytes")).unwrap();
@@ -791,7 +802,7 @@ mod tests {
         let audit_path = service_config.audit_path.clone();
 
         let service = TrustedService::open(service_config).expect("service");
-        let handle = thread::spawn(move || service.serve(Some(2)));
+        let handle = std::thread::spawn(move || service.serve(Some(2)));
         wait_for_socket(&socket);
 
         let status = request(&socket, &ServiceRequest::Status).expect("status");
@@ -829,7 +840,7 @@ mod tests {
         let socket = service_config.socket_path.clone();
 
         let service = TrustedService::open(service_config.clone()).expect("service");
-        let handle = thread::spawn(move || service.serve(Some(1)));
+        let handle = std::thread::spawn(move || service.serve(Some(1)));
         wait_for_socket(&socket);
 
         let root: RootTrustPolicy =
@@ -850,7 +861,9 @@ mod tests {
         handle.join().expect("thread").expect("serve");
 
         let service = TrustedService::open(service_config).expect("restart with revoked root");
-        let result = service.root.verify(&principal_path, ControlKind::PrincipalPolicy);
+        let result = service
+            .root
+            .verify(&principal_path, ControlKind::PrincipalPolicy);
         assert!(matches!(result, Err(ControlError::RevokedSigner { .. })));
     }
 }

@@ -4,7 +4,7 @@
 mod unix_main {
     use oryvael_control::ControlKind;
     use oryvael_supervisor::service::{
-        request, ServiceConfig, ServiceRequest, ServiceResponse, TrustedService,
+        ServiceConfig, ServiceRequest, ServiceResponse, TrustedService, request,
     };
     use std::collections::BTreeMap;
     use std::error::Error;
