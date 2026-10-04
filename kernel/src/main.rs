@@ -122,7 +122,7 @@ struct MemorySummary {
 #[unsafe(export_name = "efi_main")]
 pub extern "efiapi" fn efi_main(
     image_handle: EfiHandle,
-    system_table: *mut EfiSystemTable,
+    system_table: *mut c_void,
 ) -> EfiStatus {
     serial_init();
     serial_write("\r\nORYVAEL: firmware entry\r\n");
@@ -131,6 +131,8 @@ pub extern "efiapi" fn efi_main(
         serial_write("ORYVAEL: invalid UEFI system table\r\n");
         return 1;
     }
+
+    let system_table = system_table.cast::<EfiSystemTable>();
 
     // SAFETY: UEFI passes a valid EFI_SYSTEM_TABLE pointer to efi_main while
     // boot services are active. We only read the BootServices field here.
@@ -188,7 +190,7 @@ unsafe fn detach_firmware(
         // SAFETY: addr_of_mut! creates a raw pointer without creating a
         // reference to the static mut buffer. The buffer is exclusively used
         // by the single boot CPU during this handoff.
-        let map_ptr = core::ptr::addr_of_mut!(MEMORY_MAP.0).cast::<u8>();
+        let map_ptr = unsafe { core::ptr::addr_of_mut!(MEMORY_MAP.0).cast::<u8>() };
 
         // SAFETY: map_ptr addresses MEMORY_MAP_CAPACITY writable bytes and all
         // scalar out-parameters are valid for the duration of this call.
