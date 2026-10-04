@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::peercred::peer_credentials;
 use crate::{JobResult, JobSpec, run_job};
 use oryvael_audit::{AuditError, JsonlAuditJournal};
 use oryvael_control::{
@@ -21,8 +22,9 @@ use thiserror::Error;
 
 pub const DEFAULT_SERVICE_SOCKET: &str = "/run/oryvael/trusted.sock";
 pub const DEFAULT_SERVICE_AUDIT: &str = "/var/lib/oryvael/audit/trusted-service.jsonl";
+pub const DEFAULT_PEER_POLICY: &str = "/etc/oryvael/peer-policy.json";
 const SERVICE_ACTOR: &str = "service/oryvael-trusted";
-const SERVICE_VERSION: &str = "oryvael-trusted-service/1";
+const SERVICE_VERSION: &str = "oryvael-trusted-service/2";
 const MAX_REQUEST_BYTES: u64 = 256 * 1024;
 const MAX_RESPONSE_BYTES: u64 = 2 * 1024 * 1024;
 
@@ -31,6 +33,7 @@ pub struct ServiceConfig {
     pub socket_path: PathBuf,
     pub root_policy_path: PathBuf,
     pub minimum_epoch_path: PathBuf,
+    pub peer_policy_path: PathBuf,
     pub audit_path: PathBuf,
 }
 
@@ -40,6 +43,7 @@ impl ServiceConfig {
             socket_path: PathBuf::from(DEFAULT_SERVICE_SOCKET),
             root_policy_path: PathBuf::from(DEFAULT_ROOT_POLICY),
             minimum_epoch_path: PathBuf::from(DEFAULT_ROOT_POLICY_MIN_EPOCH),
+            peer_policy_path: PathBuf::from(DEFAULT_PEER_POLICY),
             audit_path: PathBuf::from(DEFAULT_SERVICE_AUDIT),
         }
     }
@@ -55,10 +59,50 @@ pub struct ServiceStatus {
     pub root_policy_epoch: u64,
     pub root_policy_sha256: String,
     pub minimum_epoch: u64,
+    pub peer_policy_source: PathBuf,
+    pub peer_policy_sha256: String,
+    pub peer_bindings: u64,
     pub audit_path: PathBuf,
     pub audit_records: u64,
     #[serde(default)]
     pub audit_head_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum PeerOperation {
+    Status,
+    Verify,
+    Supervise,
+}
+
+impl PeerOperation {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::Verify => "verify",
+            Self::Supervise => "supervise",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PeerBinding {
+    pub id: String,
+    pub uid: u32,
+    pub gid: u32,
+    pub executable_sha256: String,
+    pub operations: Vec<PeerOperation>,
+    #[serde(default)]
+    pub principals: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct PeerPolicy {
+    pub version: u32,
+    pub bindings: Vec<PeerBinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +117,16 @@ pub enum ServiceRequest {
         principal: PathBuf,
         job: PathBuf,
     },
+}
+
+impl ServiceRequest {
+    fn operation(&self) -> PeerOperation {
+        match self {
+            Self::Status => PeerOperation::Status,
+            Self::Verify { .. } => PeerOperation::Verify,
+            Self::Supervise { .. } => PeerOperation::Supervise,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +156,8 @@ pub enum ServiceError {
     Json(#[from] serde_json::Error),
     #[error("invalid root policy: {0}")]
     InvalidRootPolicy(String),
+    #[error("invalid peer policy: {0}")]
+    InvalidPeerPolicy(String),
     #[error("invalid minimum root epoch in {path}: {value}")]
     InvalidMinimumEpoch { path: PathBuf, value: String },
     #[error("root trust policy epoch {actual} is below persistent minimum {minimum}")]
@@ -160,9 +216,74 @@ impl RootOwner {
     }
 }
 
+struct PeerPolicyOwner {
+    source_path: PathBuf,
+    policy: PeerPolicy,
+    artifact_sha256: String,
+    signer_id: String,
+    key_version: u64,
+}
+
+impl PeerPolicyOwner {
+    fn load(root: &RootOwner, peer_policy_path: &Path) -> Result<Self, ServiceError> {
+        let verified = root.verify(peer_policy_path, ControlKind::PeerPolicy)?;
+        let policy: PeerPolicy = serde_json::from_slice(verified.bytes())?;
+        validate_peer_policy(&policy)?;
+        let control = verified.verified();
+        Ok(Self {
+            source_path: verified.path().to_path_buf(),
+            policy,
+            artifact_sha256: control.artifact_sha256.clone(),
+            signer_id: control.signer_id.clone(),
+            key_version: control.key_version,
+        })
+    }
+
+    fn binding_for(&self, peer: &PeerIdentity) -> Option<PeerBinding> {
+        self.policy
+            .bindings
+            .iter()
+            .find(|binding| {
+                binding.uid == peer.uid
+                    && binding.gid == peer.gid
+                    && binding.executable_sha256 == peer.executable_sha256
+            })
+            .cloned()
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PeerIdentity {
+    pid: u32,
+    uid: u32,
+    gid: u32,
+    executable_path: PathBuf,
+    executable_sha256: String,
+}
+
+impl PeerIdentity {
+    fn capture(stream: &UnixStream) -> Result<Self, ServiceError> {
+        let credentials = peer_credentials(stream)?;
+        let pid = u32::try_from(credentials.pid).map_err(|_| {
+            ServiceError::Protocol(format!("invalid peer pid {}", credentials.pid))
+        })?;
+        let proc_exe = PathBuf::from(format!("/proc/{pid}/exe"));
+        let executable_path = fs::read_link(&proc_exe)?;
+        let executable_sha256 = sha256_file(&proc_exe)?;
+        Ok(Self {
+            pid,
+            uid: credentials.uid,
+            gid: credentials.gid,
+            executable_path,
+            executable_sha256,
+        })
+    }
+}
+
 pub struct TrustedService {
     config: ServiceConfig,
     root: RootOwner,
+    peers: PeerPolicyOwner,
     audit: JsonlAuditJournal,
     instance_id: String,
 }
@@ -170,10 +291,12 @@ pub struct TrustedService {
 impl TrustedService {
     pub fn open(config: ServiceConfig) -> Result<Self, ServiceError> {
         let root = RootOwner::load(&config.root_policy_path, &config.minimum_epoch_path)?;
+        let peers = PeerPolicyOwner::load(&root, &config.peer_policy_path)?;
         let audit = JsonlAuditJournal::open(&config.audit_path)?;
         Ok(Self {
             config,
             root,
+            peers,
             audit,
             instance_id: new_instance_id(),
         })
@@ -190,6 +313,9 @@ impl TrustedService {
             root_policy_epoch: self.root.policy.epoch,
             root_policy_sha256: self.root.policy_sha256.clone(),
             minimum_epoch: self.root.minimum_epoch,
+            peer_policy_source: self.peers.source_path.clone(),
+            peer_policy_sha256: self.peers.artifact_sha256.clone(),
+            peer_bindings: self.peers.policy.bindings.len() as u64,
             audit_path: self.config.audit_path.clone(),
             audit_records: records.len() as u64,
             audit_head_sha256: records.last().map(|record| record.hash.clone()),
@@ -214,6 +340,9 @@ impl TrustedService {
                     self.root.policy.epoch.to_string(),
                 ),
                 ("minimum_epoch".into(), self.root.minimum_epoch.to_string()),
+                ("peer_policy_sha256".into(), self.peers.artifact_sha256.clone()),
+                ("peer_policy_signer".into(), self.peers.signer_id.clone()),
+                ("peer_policy_key_version".into(), self.peers.key_version.to_string()),
             ]),
         )?;
 
@@ -236,9 +365,65 @@ impl TrustedService {
     }
 
     fn serve_connection(&mut self, mut stream: UnixStream) -> Result<(), ServiceError> {
+        let peer = match PeerIdentity::capture(&stream) {
+            Ok(peer) => peer,
+            Err(error) => {
+                self.append_service_event(
+                    "ipc.peer.credentials_failed",
+                    self.config.socket_path.to_string_lossy().into_owned(),
+                    AuditDecision::Denied,
+                    BTreeMap::from([("error".into(), error.to_string())]),
+                )?;
+                write_response(
+                    &mut stream,
+                    &ServiceResponse::Error {
+                        code: "peer_credentials_unavailable".into(),
+                        message: error.to_string(),
+                    },
+                )?;
+                return Ok(());
+            }
+        };
+
+        let binding = match self.peers.binding_for(&peer) {
+            Some(binding) => binding,
+            None => {
+                self.append_service_event(
+                    "ipc.peer.denied",
+                    peer.executable_path.to_string_lossy().into_owned(),
+                    AuditDecision::Denied,
+                    peer_metadata(&peer, None),
+                )?;
+                write_response(
+                    &mut stream,
+                    &ServiceResponse::Error {
+                        code: "peer_authentication_failed".into(),
+                        message: "kernel peer identity is not authorized by signed peer policy"
+                            .into(),
+                    },
+                )?;
+                return Ok(());
+            }
+        };
+
+        self.append_service_event(
+            "ipc.peer.authenticated",
+            peer.executable_path.to_string_lossy().into_owned(),
+            AuditDecision::Allowed,
+            peer_metadata(&peer, Some(&binding)),
+        )?;
+
         let request = match read_request(&mut stream) {
             Ok(request) => request,
             Err(error) => {
+                let mut metadata = peer_metadata(&peer, Some(&binding));
+                metadata.insert("error".into(), error.to_string());
+                self.append_service_event(
+                    "ipc.request.invalid",
+                    self.config.socket_path.to_string_lossy().into_owned(),
+                    AuditDecision::Denied,
+                    metadata,
+                )?;
                 write_response(
                     &mut stream,
                     &ServiceResponse::Error {
@@ -250,18 +435,56 @@ impl TrustedService {
             }
         };
 
-        let response = self.handle_request(request)?;
+        let response = self.handle_request(request, &peer, &binding)?;
         write_response(&mut stream, &response)?;
         Ok(())
     }
 
-    fn handle_request(&mut self, request: ServiceRequest) -> Result<ServiceResponse, ServiceError> {
+    fn handle_request(
+        &mut self,
+        request: ServiceRequest,
+        peer: &PeerIdentity,
+        binding: &PeerBinding,
+    ) -> Result<ServiceResponse, ServiceError> {
+        let operation = request.operation();
+        if !binding.operations.contains(&operation) {
+            let mut metadata = peer_metadata(peer, Some(binding));
+            metadata.insert("operation".into(), operation.as_str().into());
+            self.append_service_event(
+                "ipc.operation.denied",
+                binding.id.clone(),
+                AuditDecision::Denied,
+                metadata,
+            )?;
+            return Ok(ServiceResponse::Error {
+                code: "peer_operation_denied".into(),
+                message: format!(
+                    "peer binding {} does not authorize {}",
+                    binding.id,
+                    operation.as_str()
+                ),
+            });
+        }
+
+        let mut metadata = peer_metadata(peer, Some(binding));
+        metadata.insert("operation".into(), operation.as_str().into());
+        self.append_service_event(
+            "ipc.operation.allowed",
+            binding.id.clone(),
+            AuditDecision::Allowed,
+            metadata,
+        )?;
+
         match request {
             ServiceRequest::Status => Ok(ServiceResponse::Status {
                 status: self.status(),
             }),
-            ServiceRequest::Verify { artifact, kind } => self.handle_verify(artifact, kind),
-            ServiceRequest::Supervise { principal, job } => self.handle_supervise(principal, job),
+            ServiceRequest::Verify { artifact, kind } => {
+                self.handle_verify(artifact, kind, peer, binding)
+            }
+            ServiceRequest::Supervise { principal, job } => {
+                self.handle_supervise(principal, job, peer, binding)
+            }
         }
     }
 
@@ -269,38 +492,44 @@ impl TrustedService {
         &mut self,
         artifact: PathBuf,
         kind: ControlKind,
+        peer: &PeerIdentity,
+        binding: &PeerBinding,
     ) -> Result<ServiceResponse, ServiceError> {
         match self.root.verify(&artifact, kind) {
             Ok(verified) => {
                 let control = verified.verified().clone();
+                let mut metadata = peer_metadata(peer, Some(binding));
+                metadata.extend([
+                    ("kind".into(), kind.as_str().into()),
+                    ("signer_id".into(), control.signer_id.clone()),
+                    ("key_version".into(), control.key_version.to_string()),
+                    ("artifact_sha256".into(), control.artifact_sha256.clone()),
+                    ("root_policy_sha256".into(), self.root.policy_sha256.clone()),
+                    (
+                        "root_policy_epoch".into(),
+                        self.root.policy.epoch.to_string(),
+                    ),
+                ]);
                 self.append_service_event(
                     "control.verify",
                     artifact.to_string_lossy().into_owned(),
                     AuditDecision::Allowed,
-                    BTreeMap::from([
-                        ("kind".into(), kind.as_str().into()),
-                        ("signer_id".into(), control.signer_id.clone()),
-                        ("key_version".into(), control.key_version.to_string()),
-                        ("artifact_sha256".into(), control.artifact_sha256.clone()),
-                        ("root_policy_sha256".into(), self.root.policy_sha256.clone()),
-                        (
-                            "root_policy_epoch".into(),
-                            self.root.policy.epoch.to_string(),
-                        ),
-                    ]),
+                    metadata,
                 )?;
                 Ok(ServiceResponse::Verified { control })
             }
             Err(error) => {
+                let mut metadata = peer_metadata(peer, Some(binding));
+                metadata.extend([
+                    ("kind".into(), kind.as_str().into()),
+                    ("error".into(), error.to_string()),
+                    ("root_policy_sha256".into(), self.root.policy_sha256.clone()),
+                ]);
                 self.append_service_event(
                     "control.verify",
                     artifact.to_string_lossy().into_owned(),
                     AuditDecision::Denied,
-                    BTreeMap::from([
-                        ("kind".into(), kind.as_str().into()),
-                        ("error".into(), error.to_string()),
-                        ("root_policy_sha256".into(), self.root.policy_sha256.clone()),
-                    ]),
+                    metadata,
                 )?;
                 Ok(ServiceResponse::Error {
                     code: "control_verification_failed".into(),
@@ -314,6 +543,8 @@ impl TrustedService {
         &mut self,
         principal_path: PathBuf,
         job_path: PathBuf,
+        peer: &PeerIdentity,
+        binding: &PeerBinding,
     ) -> Result<ServiceResponse, ServiceError> {
         let verified = match self
             .root
@@ -321,14 +552,16 @@ impl TrustedService {
         {
             Ok(verified) => verified,
             Err(error) => {
+                let mut metadata = peer_metadata(peer, Some(binding));
+                metadata.extend([
+                    ("kind".into(), ControlKind::PrincipalPolicy.as_str().into()),
+                    ("error".into(), error.to_string()),
+                ]);
                 self.append_service_event(
                     "control.verify",
                     principal_path.to_string_lossy().into_owned(),
                     AuditDecision::Denied,
-                    BTreeMap::from([
-                        ("kind".into(), ControlKind::PrincipalPolicy.as_str().into()),
-                        ("error".into(), error.to_string()),
-                    ]),
+                    metadata,
                 )?;
                 return Ok(ServiceResponse::Error {
                     code: "principal_verification_failed".into(),
@@ -338,15 +571,17 @@ impl TrustedService {
         };
 
         let control = verified.verified().clone();
+        let mut verification_metadata = peer_metadata(peer, Some(binding));
+        verification_metadata.extend([
+            ("kind".into(), ControlKind::PrincipalPolicy.as_str().into()),
+            ("signer_id".into(), control.signer_id.clone()),
+            ("artifact_sha256".into(), control.artifact_sha256.clone()),
+        ]);
         self.append_service_event(
             "control.verify",
             principal_path.to_string_lossy().into_owned(),
             AuditDecision::Allowed,
-            BTreeMap::from([
-                ("kind".into(), ControlKind::PrincipalPolicy.as_str().into()),
-                ("signer_id".into(), control.signer_id.clone()),
-                ("artifact_sha256".into(), control.artifact_sha256.clone()),
-            ]),
+            verification_metadata,
         )?;
 
         let principal: Principal = match serde_json::from_slice(verified.bytes()) {
@@ -357,9 +592,33 @@ impl TrustedService {
                     &job_path,
                     "invalid_principal_policy",
                     error.to_string(),
+                    peer,
+                    binding,
                 );
             }
         };
+
+        if !binding
+            .principals
+            .iter()
+            .any(|allowed| allowed == &principal.principal)
+        {
+            let mut metadata = peer_metadata(peer, Some(binding));
+            metadata.insert("principal".into(), principal.principal.clone());
+            self.append_service_event(
+                "ipc.principal.denied",
+                binding.id.clone(),
+                AuditDecision::Denied,
+                metadata,
+            )?;
+            return Ok(ServiceResponse::Error {
+                code: "peer_principal_denied".into(),
+                message: format!(
+                    "peer binding {} is not authorized for principal {}",
+                    binding.id, principal.principal
+                ),
+            });
+        }
 
         let job_bytes = match fs::read(&job_path) {
             Ok(bytes) => bytes,
@@ -369,6 +628,8 @@ impl TrustedService {
                     &job_path,
                     "job_read_failed",
                     error.to_string(),
+                    peer,
+                    binding,
                 );
             }
         };
@@ -380,6 +641,8 @@ impl TrustedService {
                     &job_path,
                     "invalid_job_spec",
                     error.to_string(),
+                    peer,
+                    binding,
                 );
             }
         };
@@ -397,22 +660,40 @@ impl TrustedService {
             self.root.policy.epoch.to_string(),
         );
         spec.audit_context.insert(
+            "service_peer_policy_sha256".into(),
+            self.peers.artifact_sha256.clone(),
+        );
+        spec.audit_context
+            .insert("service_peer_binding".into(), binding.id.clone());
+        spec.audit_context
+            .insert("service_peer_uid".into(), peer.uid.to_string());
+        spec.audit_context
+            .insert("service_peer_gid".into(), peer.gid.to_string());
+        spec.audit_context
+            .insert("service_peer_pid".into(), peer.pid.to_string());
+        spec.audit_context.insert(
+            "service_peer_executable_sha256".into(),
+            peer.executable_sha256.clone(),
+        );
+        spec.audit_context.insert(
             "principal_policy_sha256".into(),
             control.artifact_sha256.clone(),
         );
         spec.audit_context
             .insert("service_job_sha256".into(), sha256_hex(&job_bytes));
 
+        let mut start_metadata = peer_metadata(peer, Some(binding));
+        start_metadata.extend([
+            ("principal".into(), principal.principal.clone()),
+            ("change_id".into(), spec.change_id.clone()),
+            ("job_sha256".into(), sha256_hex(&job_bytes)),
+            ("principal_policy_sha256".into(), control.artifact_sha256),
+        ]);
         self.append_service_event(
             "service.supervise.start",
             spec.workspace.to_string_lossy().into_owned(),
             AuditDecision::Observed,
-            BTreeMap::from([
-                ("principal".into(), principal.principal.clone()),
-                ("change_id".into(), spec.change_id.clone()),
-                ("job_sha256".into(), sha256_hex(&job_bytes)),
-                ("principal_policy_sha256".into(), control.artifact_sha256),
-            ]),
+            start_metadata,
         )?;
 
         match run_job(principal.clone(), spec) {
@@ -422,7 +703,8 @@ impl TrustedService {
                 } else {
                     AuditDecision::Failed
                 };
-                let mut metadata = BTreeMap::from([
+                let mut metadata = peer_metadata(peer, Some(binding));
+                metadata.extend([
                     ("principal".into(), principal.principal),
                     ("operation_id".into(), result.operation_id.clone()),
                     ("timed_out".into(), result.timed_out.to_string()),
@@ -443,6 +725,8 @@ impl TrustedService {
                 &job_path,
                 "supervisor_failed",
                 error.to_string(),
+                peer,
+                binding,
             ),
         }
     }
@@ -453,16 +737,20 @@ impl TrustedService {
         job_path: &Path,
         code: &str,
         message: String,
+        peer: &PeerIdentity,
+        binding: &PeerBinding,
     ) -> Result<ServiceResponse, ServiceError> {
+        let mut metadata = peer_metadata(peer, Some(binding));
+        metadata.extend([
+            ("actor".into(), actor.into()),
+            ("error_code".into(), code.into()),
+            ("error".into(), message.clone()),
+        ]);
         self.append_service_event(
             "service.supervise.failed",
             job_path.to_string_lossy().into_owned(),
             AuditDecision::Failed,
-            BTreeMap::from([
-                ("actor".into(), actor.into()),
-                ("error_code".into(), code.into()),
-                ("error".into(), message.clone()),
-            ]),
+            metadata,
         )?;
         Ok(ServiceResponse::Error {
             code: code.into(),
@@ -597,6 +885,125 @@ fn validate_root_policy(policy: &RootTrustPolicy) -> Result<(), ServiceError> {
     Ok(())
 }
 
+fn validate_peer_policy(policy: &PeerPolicy) -> Result<(), ServiceError> {
+    if policy.version != 1 {
+        return Err(ServiceError::InvalidPeerPolicy(format!(
+            "unsupported version {}",
+            policy.version
+        )));
+    }
+    if policy.bindings.is_empty() {
+        return Err(ServiceError::InvalidPeerPolicy(
+            "at least one peer binding is required".into(),
+        ));
+    }
+
+    let mut ids = BTreeSet::new();
+    let mut identities = BTreeSet::new();
+    for binding in &policy.bindings {
+        if binding.id.trim().is_empty() {
+            return Err(ServiceError::InvalidPeerPolicy(
+                "peer binding id must not be empty".into(),
+            ));
+        }
+        if !ids.insert(binding.id.as_str()) {
+            return Err(ServiceError::InvalidPeerPolicy(format!(
+                "duplicate peer binding id: {}",
+                binding.id
+            )));
+        }
+        if binding.operations.is_empty() {
+            return Err(ServiceError::InvalidPeerPolicy(format!(
+                "peer binding {} has no authorized operations",
+                binding.id
+            )));
+        }
+        if !is_lower_hex_sha256(&binding.executable_sha256) {
+            return Err(ServiceError::InvalidPeerPolicy(format!(
+                "peer binding {} has invalid executable_sha256",
+                binding.id
+            )));
+        }
+        if !identities.insert((
+            binding.uid,
+            binding.gid,
+            binding.executable_sha256.as_str(),
+        )) {
+            return Err(ServiceError::InvalidPeerPolicy(format!(
+                "duplicate peer identity in binding {}",
+                binding.id
+            )));
+        }
+        if binding.operations.contains(&PeerOperation::Supervise) && binding.principals.is_empty() {
+            return Err(ServiceError::InvalidPeerPolicy(format!(
+                "peer binding {} authorizes supervise but no principals",
+                binding.id
+            )));
+        }
+        let mut operations = BTreeSet::new();
+        for operation in &binding.operations {
+            if !operations.insert(*operation) {
+                return Err(ServiceError::InvalidPeerPolicy(format!(
+                    "peer binding {} repeats operation {}",
+                    binding.id,
+                    operation.as_str()
+                )));
+            }
+        }
+        let mut principals = BTreeSet::new();
+        for principal in &binding.principals {
+            if principal.trim().is_empty() || !principals.insert(principal.as_str()) {
+                return Err(ServiceError::InvalidPeerPolicy(format!(
+                    "peer binding {} contains invalid or duplicate principal",
+                    binding.id
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn peer_metadata(peer: &PeerIdentity, binding: Option<&PeerBinding>) -> BTreeMap<String, String> {
+    let mut metadata = BTreeMap::from([
+        ("peer_pid".into(), peer.pid.to_string()),
+        ("peer_uid".into(), peer.uid.to_string()),
+        ("peer_gid".into(), peer.gid.to_string()),
+        (
+            "peer_executable".into(),
+            peer.executable_path.to_string_lossy().into_owned(),
+        ),
+        (
+            "peer_executable_sha256".into(),
+            peer.executable_sha256.clone(),
+        ),
+    ]);
+    if let Some(binding) = binding {
+        metadata.insert("peer_binding".into(), binding.id.clone());
+    }
+    metadata
+}
+
+fn is_lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn sha256_file(path: &Path) -> Result<String, ServiceError> {
+    let mut file = File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hex::encode(hasher.finalize()))
+}
+
 fn read_minimum_epoch(path: &Path) -> Result<u64, ServiceError> {
     if !path.exists() {
         return Ok(0);
@@ -692,6 +1099,11 @@ mod tests {
         path
     }
 
+    fn current_peer_identity() -> PeerIdentity {
+        let (left, _right) = UnixStream::pair().expect("pair");
+        PeerIdentity::capture(&left).expect("peer identity")
+    }
+
     fn write_root(dir: &Path, epoch: u64, status: SignerStatus) -> (PathBuf, PathBuf) {
         let key_path = dir.join("root-key.hex");
         fs::write(&key_path, hex::encode([7_u8; 32])).expect("key");
@@ -704,7 +1116,7 @@ mod tests {
                 key_version: 1,
                 public_key_hex,
                 status,
-                allowed_kinds: vec![ControlKind::PrincipalPolicy],
+                allowed_kinds: vec![ControlKind::PrincipalPolicy, ControlKind::PeerPolicy],
             }],
         };
         let root_path = dir.join("root-policy.json");
@@ -740,11 +1152,55 @@ mod tests {
         path
     }
 
-    fn config(dir: &Path, root_policy_path: PathBuf) -> ServiceConfig {
+    fn write_peer_policy(
+        dir: &Path,
+        key_path: &Path,
+        operations: Vec<PeerOperation>,
+        principals: Vec<String>,
+        identity_override: Option<(u32, u32, String)>,
+    ) -> PathBuf {
+        let identity = current_peer_identity();
+        let (uid, gid, executable_sha256) = identity_override.unwrap_or((
+            identity.uid,
+            identity.gid,
+            identity.executable_sha256,
+        ));
+        let policy = PeerPolicy {
+            version: 1,
+            bindings: vec![PeerBinding {
+                id: "test-client".into(),
+                uid,
+                gid,
+                executable_sha256,
+                operations,
+                principals,
+            }],
+        };
+        let path = dir.join("peer-policy.json");
+        fs::write(&path, serde_json::to_vec(&policy).expect("peer policy json"))
+            .expect("peer policy");
+        let signature = sign_from_files(
+            key_path,
+            "root/test",
+            1,
+            ControlKind::PeerPolicy,
+            &path,
+        )
+        .expect("peer signature");
+        fs::write(
+            signature_sidecar_path(&path),
+            serde_json::to_vec(&signature).expect("peer signature json"),
+        )
+        .expect("peer sidecar");
+        path
+    }
+
+    fn config(dir: &Path, root_policy_path: PathBuf, peer_policy_path: PathBuf) -> ServiceConfig {
         ServiceConfig {
             socket_path: dir.join("trusted.sock"),
             root_policy_path,
             minimum_epoch_path: dir.join("minimum-epoch"),
+            peer_policy_path,
             audit_path: dir.join("trusted-audit.jsonl"),
         }
     }
@@ -762,8 +1218,15 @@ mod tests {
     #[test]
     fn epoch_persists_across_restart_and_blocks_rollback() {
         let dir = temp_dir("epoch");
-        let (root_path, _) = write_root(&dir, 2, SignerStatus::Active);
-        let service_config = config(&dir, root_path.clone());
+        let (root_path, key_path) = write_root(&dir, 2, SignerStatus::Active);
+        let peer_path = write_peer_policy(
+            &dir,
+            &key_path,
+            vec![PeerOperation::Status],
+            vec![],
+            None,
+        );
+        let service_config = config(&dir, root_path.clone(), peer_path);
         let service = TrustedService::open(service_config.clone()).expect("service epoch 2");
         assert_eq!(service.status().minimum_epoch, 2);
         drop(service);
@@ -792,11 +1255,18 @@ mod tests {
     }
 
     #[test]
-    fn unix_service_verifies_with_pinned_root_and_persists_audit() {
+    fn unix_service_authenticates_peer_and_persists_audit() {
         let dir = temp_dir("socket");
         let (root_path, key_path) = write_root(&dir, 4, SignerStatus::Active);
         let principal_path = write_signed_principal(&dir, &key_path);
-        let service_config = config(&dir, root_path.clone());
+        let peer_path = write_peer_policy(
+            &dir,
+            &key_path,
+            vec![PeerOperation::Status, PeerOperation::Verify],
+            vec!["developer-ai/test".into()],
+            None,
+        );
+        let service_config = config(&dir, root_path.clone(), peer_path);
         let socket = service_config.socket_path.clone();
         let audit_path = service_config.audit_path.clone();
 
@@ -819,15 +1289,78 @@ mod tests {
         handle.join().expect("thread").expect("serve");
 
         let ledger = load_jsonl(&audit_path).expect("audit");
-        let actions = ledger
+        assert!(ledger.records().iter().any(|record| {
+            record.event.action == "ipc.peer.authenticated"
+                && record.event.metadata.contains_key("peer_pid")
+                && record.event.metadata.contains_key("peer_executable_sha256")
+        }));
+        assert!(ledger
             .records()
             .iter()
-            .map(|record| record.event.action.as_str())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            actions,
-            vec!["service.started", "control.verify", "service.stopped"]
+            .any(|record| record.event.action == "control.verify"));
+    }
+
+    #[test]
+    fn unbound_peer_is_rejected_before_request_authorization() {
+        let dir = temp_dir("peer-deny");
+        let (root_path, key_path) = write_root(&dir, 5, SignerStatus::Active);
+        let identity = current_peer_identity();
+        let peer_path = write_peer_policy(
+            &dir,
+            &key_path,
+            vec![PeerOperation::Status],
+            vec![],
+            Some((
+                identity.uid.saturating_add(1),
+                identity.gid,
+                identity.executable_sha256,
+            )),
         );
+        let service_config = config(&dir, root_path, peer_path);
+        let socket = service_config.socket_path.clone();
+        let service = TrustedService::open(service_config).expect("service");
+        let handle = std::thread::spawn(move || service.serve(Some(1)));
+        wait_for_socket(&socket);
+
+        let response = request(&socket, &ServiceRequest::Status).expect("response");
+        assert!(matches!(
+            response,
+            ServiceResponse::Error { ref code, .. } if code == "peer_authentication_failed"
+        ));
+        handle.join().expect("thread").expect("serve");
+    }
+
+    #[test]
+    fn peer_cannot_claim_unbound_principal() {
+        let dir = temp_dir("principal-deny");
+        let (root_path, key_path) = write_root(&dir, 6, SignerStatus::Active);
+        let principal_path = write_signed_principal(&dir, &key_path);
+        let peer_path = write_peer_policy(
+            &dir,
+            &key_path,
+            vec![PeerOperation::Supervise],
+            vec!["security-ai/test".into()],
+            None,
+        );
+        let service_config = config(&dir, root_path, peer_path);
+        let socket = service_config.socket_path.clone();
+        let service = TrustedService::open(service_config).expect("service");
+        let handle = std::thread::spawn(move || service.serve(Some(1)));
+        wait_for_socket(&socket);
+
+        let response = request(
+            &socket,
+            &ServiceRequest::Supervise {
+                principal: principal_path,
+                job: dir.join("not-needed.json"),
+            },
+        )
+        .expect("response");
+        assert!(matches!(
+            response,
+            ServiceResponse::Error { ref code, .. } if code == "peer_principal_denied"
+        ));
+        handle.join().expect("thread").expect("serve");
     }
 
     #[test]
@@ -835,7 +1368,14 @@ mod tests {
         let dir = temp_dir("root-snapshot");
         let (root_path, key_path) = write_root(&dir, 7, SignerStatus::Active);
         let principal_path = write_signed_principal(&dir, &key_path);
-        let service_config = config(&dir, root_path.clone());
+        let peer_path = write_peer_policy(
+            &dir,
+            &key_path,
+            vec![PeerOperation::Verify],
+            vec!["developer-ai/test".into()],
+            None,
+        );
+        let service_config = config(&dir, root_path.clone(), peer_path);
         let socket = service_config.socket_path.clone();
 
         let service = TrustedService::open(service_config.clone()).expect("service");
@@ -851,7 +1391,7 @@ mod tests {
         let response = request(
             &socket,
             &ServiceRequest::Verify {
-                artifact: principal_path.clone(),
+                artifact: principal_path,
                 kind: ControlKind::PrincipalPolicy,
             },
         )
@@ -859,10 +1399,9 @@ mod tests {
         assert!(matches!(response, ServiceResponse::Verified { .. }));
         handle.join().expect("thread").expect("serve");
 
-        let service = TrustedService::open(service_config).expect("restart with revoked root");
-        let result = service
-            .root
-            .verify(&principal_path, ControlKind::PrincipalPolicy);
-        assert!(matches!(result, Err(ControlError::RevokedSigner { .. })));
+        assert!(matches!(
+            TrustedService::open(service_config),
+            Err(ServiceError::Control(ControlError::RevokedSigner { .. }))
+        ));
     }
 }
