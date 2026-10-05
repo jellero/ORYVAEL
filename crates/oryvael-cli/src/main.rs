@@ -14,9 +14,7 @@ use oryvael_control::{
 };
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
-use oryvael_protocol::{
-    Operation, Principal, WorkloadManifest, validate_workload_manifest,
-};
+use oryvael_protocol::{Operation, Principal, WorkloadManifest, validate_workload_manifest};
 use oryvael_release::{
     approval_context_from_files, check_from_files as check_release_from_files,
     check_from_files_with_approvals,
