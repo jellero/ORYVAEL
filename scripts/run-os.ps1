@@ -2,7 +2,11 @@ param(
     [string]$QemuPath = "C:\Program Files\qemu\qemu-system-x86_64.exe",
     [ValidateSet("User", "Tap")]
     [string]$NetworkMode = "User",
-    [string]$TapAdapter = "OpenVPN TAP-Windows6"
+    [string]$TapAdapter = "OpenVPN TAP-Windows6",
+    [ValidateSet("Gui", "Headless")]
+    [string]$DisplayMode = "Gui",
+    [ValidateRange(1, 65535)]
+    [int]$SshHostPort = 2222
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,12 +36,16 @@ $qemuArgs = @(
     "-drive", "if=pflash,format=raw,readonly=on,file=$code",
     "-drive", "if=pflash,format=raw,file=$vars",
     "-drive", "if=virtio,format=raw,file=$image",
-    "-display", "gtk,show-tabs=on",
-    "-vga", "none",
-    "-serial", "vc",
+    "-vga", "std",
     "-monitor", "none",
     "-device", "rtl8139,netdev=net0"
 )
+
+if ($DisplayMode -eq "Headless") {
+    $qemuArgs += @("-display", "none", "-serial", "stdio")
+} else {
+    $qemuArgs += @("-display", "gtk,show-tabs=on", "-serial", "vc")
+}
 
 if ($NetworkMode -eq "Tap") {
     $adapter = Get-NetAdapter -Name $TapAdapter -ErrorAction SilentlyContinue
@@ -49,12 +57,13 @@ if ($NetworkMode -eq "Tap") {
     }
     $qemuArgs += @("-netdev", "tap,id=net0,ifname=$TapAdapter,script=no,downscript=no")
 } else {
-    # Keep the guest reachable from Windows without requiring a TAP adapter.
-    # SSH listens on guest port 22; use localhost:2222 on the host.
-    $qemuArgs += @("-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22")
+    # QEMU user networking creates a private NAT automatically. Binding the
+    # forward to loopback keeps guest SSH reachable only from this host.
+    $qemuArgs += @("-netdev", "user,id=net0,hostfwd=tcp:127.0.0.1:$SshHostPort-:22")
+    Write-Host "ORYVAEL QEMU NAT: 127.0.0.1:$SshHostPort -> guest tcp/22"
 }
 
 # Keep QEMU attached to this launcher. Passing the argument array directly
-# preserves adapter names and firmware paths exactly on Windows. There is no
+# preserves firmware paths and adapter names exactly on Windows. There is no
 # -no-reboot flag, so the ORYVAEL `reboot` command restarts the guest.
 & $QemuPath @qemuArgs

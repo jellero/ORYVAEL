@@ -1,6 +1,7 @@
 /target
 /kernel/target
 /dist
+/.oryvael
 *.swp
 *.swo
 .DS_Store

@@ -22,8 +22,14 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             dosfstools \
             mtools \
+            openssh-client \
             ovmf \
             qemu-system-x86
+
+      - name: Provision ephemeral CI administrator key
+        run: |
+          mkdir -p .oryvael
+          ssh-keygen -q -t ed25519 -N '' -f .oryvael/oryvael_admin -C oryvael-ci-admin
 
       - name: Build ORYVAEL bare-metal image
         run: ./scripts/build-os.sh
