@@ -1,0 +1,47 @@
+{
+  "version": "oryvael-workload/1",
+  "id": "example.web",
+  "artifact": {
+    "format": "oci",
+    "reference": "oci://registry.example/oryvael/web@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "platform": "oryvael/x86_64"
+  },
+  "isolation": "process",
+  "entrypoint": ["/app/web", "--listen", "0.0.0.0:8080"],
+  "resources": {
+    "memory_bytes": 268435456,
+    "cpu_millis_per_second": 250,
+    "max_processes": 8
+  },
+  "network": {
+    "default": "deny"
+  },
+  "capabilities": [
+    {
+      "resource": "socket:tcp/8080",
+      "actions": ["listen", "accept"]
+    },
+    {
+      "resource": "directory:/app",
+      "actions": ["read", "enumerate"]
+    },
+    {
+      "resource": "directory:/tmp",
+      "actions": ["read", "write"]
+    }
+  ],
+  "volumes": [
+    {
+      "id": "web-content",
+      "target": "/srv/web",
+      "access": "read"
+    }
+  ],
+  "secrets": [
+    {
+      "id": "tls-web",
+      "operations": ["sign"]
+    }
+  ]
+}
