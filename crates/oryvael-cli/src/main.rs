@@ -14,7 +14,9 @@ use oryvael_control::{
 };
 use oryvael_evidence::extract_from_jsonl;
 use oryvael_proof::{build_audited_from_files, build_from_files};
-use oryvael_protocol::{Operation, Principal};
+use oryvael_protocol::{
+    Operation, Principal, WorkloadManifest, validate_workload_manifest,
+};
 use oryvael_release::{
     approval_context_from_files, check_from_files as check_release_from_files,
     check_from_files_with_approvals,
@@ -39,6 +41,9 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     ArchCheck {
+        file: String,
+    },
+    WorkloadCheck {
         file: String,
     },
     PolicyCheck {
@@ -182,6 +187,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         Command::ArchCheck { file } => {
             let architecture: Architecture = read_json(&file)?;
             let violations = oryvael_arch::validate(&architecture);
+            println!("{}", serde_json::to_string_pretty(&violations)?);
+            if !violations.is_empty() {
+                process::exit(2);
+            }
+        }
+        Command::WorkloadCheck { file } => {
+            let manifest: WorkloadManifest = read_json(&file)?;
+            let violations = validate_workload_manifest(&manifest);
             println!("{}", serde_json::to_string_pretty(&violations)?);
             if !violations.is_empty() {
                 process::exit(2);
