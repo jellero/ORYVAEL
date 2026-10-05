@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oryvael.dev/spec/workload-manifest.schema.json",
+  "title": "ORYVAEL Workload Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "id",
+    "artifact",
+    "isolation",
+    "entrypoint",
+    "resources",
+    "network",
+    "capabilities"
+  ],
+  "properties": {
+    "version": {"const": "oryvael-workload/1"},
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "reference", "digest", "platform"],
+      "properties": {
+        "format": {"enum": ["oryvael_native", "oci"]},
+        "reference": {"type": "string", "minLength": 1},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "platform": {
+          "type": "string",
+          "pattern": "^(oryvael|linux)/(x86_64|aarch64)$"
+        }
+      }
+    },
+    "isolation": {"enum": ["process", "microvm"]},
+    "entrypoint": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["memory_bytes", "cpu_millis_per_second", "max_processes"],
+      "properties": {
+        "memory_bytes": {"type": "integer", "minimum": 1048576},
+        "cpu_millis_per_second": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "max_processes": {"type": "integer", "minimum": 1, "maximum": 4096}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default"],
+      "properties": {
+        "default": {"const": "deny"}
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource", "actions"],
+        "properties": {
+          "resource": {"type": "string", "minLength": 1},
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1},
+            "uniqueItems": true
+          },
+          "scope": {"type": ["string", "null"]},
+          "user_presence": {"type": "boolean", "default": false}
+        }
+      }
+    },
+    "volumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "target", "access"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "target": {"type": "string", "pattern": "^/"},
+          "access": {"enum": ["read", "read_write"]}
+        }
+      }
+    },
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "operations"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"enum": ["sign", "decrypt"]},
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  }
+}
