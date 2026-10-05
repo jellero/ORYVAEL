@@ -199,12 +199,13 @@ pub fn validate_workload_manifest(manifest: &WorkloadManifest) -> Vec<String> {
         violations.push("unsupported workload manifest version".to_string());
     }
     if manifest.id.is_empty()
-        || !manifest
-            .id
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte))
+        || !manifest.id.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+        })
     {
-        violations.push("workload id must use lowercase ASCII letters, digits, '.', '_' or '-'".to_string());
+        violations.push(
+            "workload id must use lowercase ASCII letters, digits, '.', '_' or '-'".to_string(),
+        );
     }
     if manifest.artifact.reference.is_empty() {
         violations.push("artifact reference must not be empty".to_string());
@@ -273,13 +274,15 @@ pub fn validate_workload_manifest(manifest: &WorkloadManifest) -> Vec<String> {
 
     for volume in &manifest.volumes {
         if volume.id.is_empty() || !volume.target.starts_with('/') {
-            violations.push("workload volumes require a non-empty id and absolute target".to_string());
+            violations
+                .push("workload volumes require a non-empty id and absolute target".to_string());
         }
     }
 
     for secret in &manifest.secrets {
         if secret.id.is_empty() || secret.operations.is_empty() {
-            violations.push("workload secrets require an id and at least one operation".to_string());
+            violations
+                .push("workload secrets require an id and at least one operation".to_string());
         }
         if secret
             .operations
@@ -369,26 +372,32 @@ mod workload_tests {
     fn rejects_wildcard_authority() {
         let mut candidate = manifest();
         candidate.capabilities[0].actions = vec!["*".to_string()];
-        assert!(validate_workload_manifest(&candidate)
-            .iter()
-            .any(|violation| violation.contains("wildcard authority")));
+        assert!(
+            validate_workload_manifest(&candidate)
+                .iter()
+                .any(|violation| violation.contains("wildcard authority"))
+        );
     }
 
     #[test]
     fn rejects_reserved_policy_authority() {
         let mut candidate = manifest();
         candidate.capabilities[0].resource = "policy.modify".to_string();
-        assert!(validate_workload_manifest(&candidate)
-            .iter()
-            .any(|violation| violation.contains("reserved authority")));
+        assert!(
+            validate_workload_manifest(&candidate)
+                .iter()
+                .any(|violation| violation.contains("reserved authority"))
+        );
     }
 
     #[test]
     fn rejects_network_allow_default() {
         let mut candidate = manifest();
         candidate.network.default = WorkloadNetworkDefault::Allow;
-        assert!(validate_workload_manifest(&candidate)
-            .iter()
-            .any(|violation| violation.contains("default to deny")));
+        assert!(
+            validate_workload_manifest(&candidate)
+                .iter()
+                .any(|violation| violation.contains("default to deny"))
+        );
     }
 }
