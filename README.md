@@ -52,7 +52,23 @@ For phones and mobile devices:
 - telephony, camera and sensor capabilities;
 - the same app, capability and audit contracts as Desktop.
 
-The user experience differs. The trust model does not.
+### ORYVAEL Embedded / Edge
+
+For IoT, robotics, gateways and physical-world controllers:
+- deterministic device-side capability enforcement;
+- authenticated device identity;
+- signed updates, recovery and rollback where hardware permits;
+- auditable hardware brokers for GPIO, buses, sensors and actuators;
+- constrained Rust `no_std` runtimes for MCU-class targets;
+- richer isolated workloads and optional WASM on Edge-class systems;
+- no requirement for an on-device AI model;
+- remote AI requests remain untrusted until local policy authorizes them.
+
+The first experimental embedded direction is a RISC-V MCU/SoC backend, with ESP32-P4-class hardware as a candidate target. This is a separate architecture port rather than a direct build of the current x86_64 kernel.
+
+The user experience and hardware mechanisms differ across profiles. The trust model does not.
+
+See `docs/architecture/embedded-edge.md` for the Embedded / Edge authority boundary, portability model and prototype milestones.
 
 ## Repository map
 
@@ -60,7 +76,7 @@ The user experience differs. The trust model does not.
 - kernel/ — freestanding ORYVAEL bare-metal kernel and native userspace bootstrap
 - docs/vision.md — product vision
 - docs/principles.md — engineering principles
-- docs/architecture/ — system design
+- docs/architecture/ — system design, including the Embedded / Edge profile
 - docs/security/ — threat model and invariants
 - docs/governance/ — human authority
 - docs/development/ — AI-native SDLC and bare-metal quickstart
@@ -121,6 +137,8 @@ The native x86_64 kernel installs its own GDT, TSS kernel stack, 32 architectura
 
 The existing Linux trusted-core crates remain useful as a reference implementation for governance, policy, proof and audit semantics while those mechanisms migrate into native ORYVAEL kernel/system services. ADR-0005 supersedes the earlier Linux-first product direction.
 
+Embedded/Edge targets reuse ORYVAEL authority semantics but require target-specific boot, isolation, interrupt, memory-protection and peripheral backends. Hardware that cannot enforce a required authority boundary must declare that limitation rather than silently weakening the contract.
+
 Trusted components are written in Rust. Unsafe code remains forbidden by default and is allowed only at narrowly reviewed hardware/firmware/privilege boundaries under ADR-0005.
 
 ## Bare-metal quickstart
@@ -164,6 +182,8 @@ The recovery console exposes `help`, `status`, `debug`, `ip`, `net`, `ping [host
 
 The existing trusted-core CI continues to validate governance and security semantics, but Linux sandbox mechanisms are reference/prototype infrastructure rather than the ORYVAEL OS substrate. No model or inference runtime executes inside the native image yet; “AI-native” describes the target authority and capability architecture, not a completed embedded model runtime.
 
+The Embedded / Edge profile is currently architectural only; no ESP32 or other MCU target is delivered yet.
+
 This is a native minimal OS foundation, not yet a general-purpose or production-secure operating system. The current timer still uses PIT/PIC; only one ring-3 process is executed and preemption is measured rather than context-switched among multiple runnable processes; the kernel retains inherited lower-level mappings below its new PML4 root; the filesystem is RAM-only; persistent storage and graphics are not implemented yet. Networking currently targets a polled RTL8139 device and provides DHCP, ARP, IPv4, ICMP echo and a deliberately small single-session TCP/SSHv2 server rather than a general-purpose socket layer.
 
 ## Immediate kernel milestones
@@ -177,6 +197,7 @@ This is a native minimal OS foundation, not yet a general-purpose or production-
 7. Add framebuffer/graphics input, generalize the current TCP/SSH implementation and move the NIC to interrupt-driven service.
 8. Port governance, audit and root-control semantics from the host reference into native services.
 9. Add an ARM64 boot path after the x86_64 kernel contracts stabilize.
+10. Define the architecture-neutral kernel contracts needed by the Embedded / Edge backend before introducing MCU-specific code into the runtime tree.
 
 ## License
 
