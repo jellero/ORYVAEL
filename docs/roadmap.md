@@ -180,6 +180,48 @@ Exit:
 - common app/capability contracts work on Desktop and Mobile;
 - continuity transfers state without silently transferring privilege.
 
+## Parallel Track — Embedded / Edge Prototype
+
+Status: architecture defined; implementation not started.
+
+This track reuses ORYVAEL authority semantics on IoT, robotics and gateway
+hardware without requiring the Desktop runtime or an on-device AI model. The
+device remains an independent deterministic enforcement point for physical
+operations requested by remote or local AI components.
+
+Architecture:
+- `docs/architecture/embedded-edge.md` defines the profile, authority boundary,
+  portability model and initial milestones;
+- MCU targets use a constrained Rust `no_std` runtime;
+- Edge targets may add persistent storage, richer networking, isolated
+  workloads and optional WASM;
+- ESP32-P4-class RISC-V hardware is an initial candidate, not a vendor-specific
+  architectural dependency.
+
+Initial deliverables:
+- extract architecture-neutral capability, IPC and audit contracts from the
+  current native implementation;
+- define an `arch/riscv32`-style backend boundary without regressing x86_64;
+- boot a Rust `no_std` runtime on one selected RISC-V MCU/SoC;
+- initialize serial console, timer and watchdog;
+- establish authenticated device identity;
+- capability-broker one GPIO or simulated actuator operation;
+- demonstrate fail-closed denial of an unauthorized physical operation with an
+  attributable audit record;
+- add authenticated network control without coupling administration authority
+  to actuator authority;
+- verify a signed firmware/update manifest and demonstrate rollback/recovery;
+- port to a second embedded target to prove the HAL and authority contracts are
+  not vendor-specific.
+
+Exit:
+- a remote AI agent can request a physical action but cannot exceed its granted
+  device capability scope;
+- an unauthorized actuator request is deterministically denied and audited;
+- firmware authority is signed, anti-rollback aware and independent from the AI
+  requesting the update;
+- the same capability/audit semantics are demonstrated on two embedded targets.
+
 ## Phase 6 — Native Kernel Maturity
 
 The Linux-versus-custom-kernel product decision is resolved by ADR-0005:
@@ -191,8 +233,10 @@ Deliver:
 - generalized storage, network, USB and power-management frameworks;
 - measurable TCB, performance and energy budgets;
 - hardware-backed roots and verified boot/recovery;
-- formal models and targeted verification for critical authority boundaries.
+- formal models and targeted verification for critical authority boundaries;
+- architecture-neutral kernel contracts that support Desktop, Mobile and
+  Embedded/Edge backends without weakening target-specific isolation claims.
 
 ## Long-term target
 
-Routine implementation and maintenance may become predominantly AI-operated while C3/C4 authority, root keys, attribution and release evidence remain explicitly human governed.
+Routine implementation and maintenance may become predominantly AI-operated while C3/C4 authority, root keys, attribution and release evidence remain explicitly human governed. On physical-world devices, AI-directed actions remain subordinate to deterministic local capability and safety policy.
